@@ -1,3 +1,10 @@
+# Do not store live configs
+conf.yml
+conf.d/*.yml
+
+# Vim swap files
+.*.sw[a-z]
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

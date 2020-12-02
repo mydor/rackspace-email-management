@@ -1,0 +1,47 @@
+# Domain level spam settings
+spam:
+   settings:
+      filterLevel: on
+      rsEmail.spamHandling: toFolder
+      rsEmail.hasFolderCleaner: true
+      rsEmail.spamFolderAgeLimit: 14
+      rsEmail.spamFolderNumLimit: 0
+      rsEmail.spamForwardingAddress: ""
+   blocklist: []
+   ipblocklist: []
+   safelist: []
+   ipsafelist: []
+   ### blocklist:
+   ###   - "@baddomain"
+   ###   - "bademail@somedomain.com"
+   ###   - "bounce%@otherdomain.com"
+   ### ipblocklist: 
+   ###   - "1.2.3.4"
+   ###   - "2.3.4.%"
+   ###   - "3.4.%.%"
+   ###   - "4.%.%.%"
+
+accounts:
+   account1@domain.com:
+      # See domain spam settings above
+      spam:
+         settings:
+            filterLevel: on
+            rsEmail.spamHandling: toFolder
+            rsEmail.hasFolderCleaner: true
+            rsEmail.spamFolderAgeLimit: 14
+            rsEmail.spamFolderNumLimit: 0
+            rsEmail.spamForwardingAddress: ""
+         blocklist: []
+         ipblocklist: []
+         safelist: []
+         ipsafelist: []
+
+      firstName: First
+      lastName: Last
+      # displayName is optional, defaults to "firstName lastName" if not present
+      displayName: "Ruler of the universe"
+      # aliases is optional, list of fqdn email addresses
+      aliases:
+        - alias1@domain.com
+        - alias2@domain.com

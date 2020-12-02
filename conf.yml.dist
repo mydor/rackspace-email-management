@@ -1,0 +1,13 @@
+customer_id: 123456
+# user_agent: Rackspace Management Interface
+
+# Replace with your 20 character User Key from RackSpace
+user_key: kXPksUOCMkG0LGfH23FI
+# Replace with your 40 character Secret Key from RackSpace
+secret_key: NerklC5LPM8pckILELePglW5LIl0zifUcmTYfFW7
+api_url: https://api.emailsrvr.com
+conf_dir: conf.d
+
+# Each domain listed must have a corresponding domain yaml config in the conf_dir directory
+domains:
+  - yourdomain.com
