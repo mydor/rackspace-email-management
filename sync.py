@@ -41,7 +41,7 @@ def _init_accounts(domain, data, api):
         acct_name = _acct_name.replace(f'@{domain}', '')
         _acct_data['name'] = acct_name
 
-        account = Account(_acct_data, api=api)
+        account = Account(acct_name, data=_acct_data, api=api)
         accounts.update({acct_name: account})
 
         #print(f'{domain} - {account}')
@@ -108,6 +108,11 @@ def process_domain(domain, data, api):
     api.set_domain(domain)
 
     print(domain)
+    ### print(accounts)
+    ### print('----------')
+    ### print(Accounts(api).get_accounts())
+    ### raise
+
     process_accounts(accounts, Accounts(api).get_accounts())
     process_aliases(aliases, Aliases(api).get_aliases())
 
@@ -120,6 +125,6 @@ if __name__ == '__main__':
     for domain, domain_cfg in CONFIG['domains'].items():
         ### print(json.dumps(domain_cfg, sort_keys=True, indent=4))
 
-        if domain != 'moonlightimagery.com':
+        if domain == 'moonlightimagery.com':
             continue
         process_domain(domain, domain_cfg['accounts'], api)

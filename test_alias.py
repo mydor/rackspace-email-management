@@ -1,11 +1,11 @@
 #!/bin/env python3
 
 from rackspace import Api
-from rackspace import Aliases
+from rackspace import Aliases, Alias
 import yaml
 import json
 
-with open('cfg.yml', 'r') as fh:
+with open('conf.yml', 'r') as fh:
     raw = fh.read()
 CONFIG = yaml.safe_load(raw)
 

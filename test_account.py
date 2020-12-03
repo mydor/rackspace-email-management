@@ -2,11 +2,11 @@
 
 from rackspace import Api
 from rackspace import Aliases
-from rackspace import Accounts
+from rackspace import Accounts, Account
 import yaml
 import json
 
-with open('cfg.yml', 'r') as fh:
+with open('conf.yml', 'r') as fh:
     raw = fh.read()
 CONFIG = yaml.safe_load(raw)
 
@@ -28,10 +28,20 @@ def status(response, status_code=None):
         print(json.dumps(response.json(), sort_keys=True, indent=4))
     assert response.status_code == status_code
 
+data = Account('michael.smith', api=api, data={'firstName': 'Michael', 'lastName': 'Smith'})
+data = Account('michael.smith', api=api)
+print(data)
+rs = data.get()
+print(rs)
+
+print(data.diff(rs))
+
+raise
 data = accounts.get_accounts()
-test = data['testremove']
-print(test)
-test.remove()
+print(data)
+#test = data['testremove']
+#print(test)
+#test.remove()
 
 ### #api.httpclient_logging_patch()
 ### response = accounts.get_accounts()
