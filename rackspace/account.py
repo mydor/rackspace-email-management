@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from .api import Api
-
-DEBUG = True
-
+DEBUG = False
 
 class DuplicateLoadError(Exception):
+    pass
+
+
+class RetrieveLimit(Exception):
     pass
 
 
@@ -89,7 +90,7 @@ class Account(object):
             'size',
             ]
 
-    def __init__(self, name: str, data: dict =None, api: Api =None) -> None:
+    def __init__(self, name: str, data: dict =None, api: Api =None, debug: bool =DEBUG) -> None:
         """Create an Account object
 
         Instantiate an object of Account
@@ -107,6 +108,7 @@ class Account(object):
         """
         self.name = name
         self.loaded = False
+        self.debug = debug
 
         if api is not None:
             self.api = api
@@ -320,7 +322,7 @@ class Account(object):
         if FAILED:
             raise LookupError('Data missing required fields to add account')
 
-        if DEBUG:
+        if self.debug:
             print(f"\n{path}\n   ACCOUNT ADD: '{self.name}'")
         else:
             response = self.api.post(path, data, *pargs, **kwargs)
@@ -341,7 +343,7 @@ class Account(object):
         """
         path = f'{self.api._account_path(self.name)}'
 
-        if DEBUG:
+        if self.debug:
             print(f"\n{path}\n   ACCOUNT REMOVE: '{self.name}'")
         else:
             response = self.api.delete(path, *pargs, **kwargs)
@@ -363,7 +365,7 @@ class Account(object):
         """
         path = f'{self.api._account_path(self.name)}'
 
-        if DEBUG:
+        if self.debug:
             print(f"\n{path}\n   ACCOUNT RENAME: '{self.name}' -> '{newname}'")
         else:
             response = self.api.put(path, data={'name': newname}, *pargs, **kwargs)
@@ -385,8 +387,66 @@ class Account(object):
         """
         path = f'{self.api._account_path(self.name)}'
 
-        if DEBUG:
+        if self.debug:
             print(f"\n{path}\n   ACCOUNT UPDATE: '{self.name}' => {data}")
         else:
             response = self.api.put(path, data=data, *pargs, **kwargs)
             return self.api._success(response)
+
+
+class Accounts(object):
+    def __init__(self, api: Api, debug: bool =DEBUG) -> None:
+        self.api = api
+        self.debug = debug
+
+        self.api.gen_auth()
+
+    def get(self, limit=None, *pargs: list, **kwargs: dict) -> dict:
+        """API: Get list of accounts
+
+        Get a list of all accounts, instantiating Account objects for them
+
+        Args:
+           limit (int, optional): Maximum number of accounts to return
+           size (int, optional): Number of entries per page to return, default 50
+           offset (int, optional): Page number to get `size` entries
+
+        Returns:
+           dict: {`name`: Account()} list of accounts
+
+        Raises:
+           None
+        """
+        accounts = {}
+
+        path = f'{self.api._accounts_path()}/'
+
+        while True:
+            response = self.api.get(path, *pargs, **kwargs)
+            assert response.status_code == 200 and response.text
+            data = response.json()
+
+            try:
+                for idx, account_meta in enumerate(data['rsMailboxes']):
+                    if isinstance(limit, int) and len(accounts) >= limit:
+                        raise RetrieveLimit
+
+                    ### print(f'get_accounts()[{idx + data["offset"]}] => {account_meta}')
+
+                    account = Account(account_meta['name'], api=self.api, debug=self.debug).get()
+                    #account = self.get_account(account_meta['name'])
+                    accounts.update({account.name: account})
+
+            except RetrieveLimit:
+                break
+
+            # If this is the last page of info, break the main loop
+            if data['offset'] + data['size'] > data['total']:
+                break
+
+            # Not the last page, set data to get next page
+            # and loop again
+            kwargs['size'] = data['size']
+            kwargs['offset'] = data['offset'] + data['size']
+
+        return accounts

@@ -1,9 +1,7 @@
 #!/bin/env python3
 
-from rackspace import Accounts
-from rackspace import Account
-from rackspace import Aliases
-from rackspace import Alias
+from rackspace import Account, Accounts
+from rackspace import Alias, Aliases
 from rackspace import Api
 
 import json
@@ -11,6 +9,7 @@ import os
 import yaml
 
 CONFIG_FILE = 'conf.yml'
+DEBUG = False
 
 def load_config(name=None):
     if name is None:
@@ -41,7 +40,7 @@ def _init_accounts(domain, data, api):
         acct_name = _acct_name.replace(f'@{domain}', '')
         _acct_data['name'] = acct_name
 
-        account = Account(acct_name, data=_acct_data, api=api)
+        account = Account(acct_name, data=_acct_data, api=api, debug=DEBUG)
         accounts.update({acct_name: account})
 
         #print(f'{domain} - {account}')
@@ -51,10 +50,10 @@ def _init_accounts(domain, data, api):
         for _alias in _acct_data['aliases']:
             alias = _alias.replace(f'@{domain}', '')
             if alias not in aliases:
-                aliases[alias] = Alias(name=alias, address=_acct_name, api=api)
+                aliases[alias] = Alias(name=alias, address=_acct_name, api=api, debug=DEBUG)
 
             else:
-                aliases[alias].add_address(_acct_data['name'])
+                aliases[alias].add_address(_acct_name)
 
             #print(f'-  {aliases[name]}')
 
@@ -64,38 +63,46 @@ def _init_accounts(domain, data, api):
 
 def process_accounts(cfg_accounts, rs_accounts):
     for name, account in cfg_accounts.items():
-        if name not in rs_accounts:
+
+        name_lc = name.lower()
+        if name_lc not in rs_accounts:
             ### print(f'ADD: account {name}')
 
             account.add()
+
         else:
-            diff = account.diff(rs_accounts[name])
+            diff = account.diff(rs_accounts[name_lc])
             if len(diff):
                 ### print(f'UPDATE: account {name}')
                 ### print(f' - {diff}')
                 account.update(diff)
 
+    cfg_accounts_lc = set(k.lower() for k in cfg_accounts)
     for name, account in rs_accounts.items():
-        if name not in cfg_accounts:
+        if name not in cfg_accounts_lc:
             ### print(f'DEL: account {name}')
             account.remove()
 
 def process_aliases(cfg_aliases, rs_aliases):
     for name, alias in cfg_aliases.items():
-        if name not in rs_aliases:
+
+        name_lc = name.lower()
+        if name_lc not in rs_aliases:
             ### print(f'ADD: alias {name}')
             ### print(f'  - {cfg_aliases[name].addresses}')
             ### print(alias)
             alias.add()
+
         else:
-            diff = alias.diff(rs_aliases[name])
+            diff = alias.diff(rs_aliases[name_lc])
             if diff['changes']:
                 ### print(f'UPDATE: alias {name}')
                 ### print(f'  - {diff}')
                 alias.replace()
 
+    cfg_aliases_lc = set(k.lower() for k in cfg_aliases)
     for name, alias in rs_aliases.items():
-        if name not in cfg_aliases:
+        if name not in set(k.lower() for k in cfg_aliases):
             ### print(f'DEL: alias {name}')
             alias.remove()
 
@@ -110,11 +117,11 @@ def process_domain(domain, data, api):
     print(domain)
     ### print(accounts)
     ### print('----------')
-    ### print(Accounts(api).get_accounts())
+    ### print(Accounts(api).get())
     ### raise
 
-    process_accounts(accounts, Accounts(api).get_accounts())
-    process_aliases(aliases, Aliases(api).get_aliases())
+    process_accounts(accounts, Accounts(api, debug=DEBUG).get())
+    process_aliases(aliases, Aliases(api, debug=DEBUG).get())
 
 if __name__ == '__main__':
     CONFIG = load_config()
@@ -125,6 +132,6 @@ if __name__ == '__main__':
     for domain, domain_cfg in CONFIG['domains'].items():
         ### print(json.dumps(domain_cfg, sort_keys=True, indent=4))
 
-        if domain == 'moonlightimagery.com':
+        if domain == 'XXXmoonlightimagery.com':
             continue
         process_domain(domain, domain_cfg['accounts'], api)
