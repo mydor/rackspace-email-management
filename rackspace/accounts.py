@@ -16,24 +16,7 @@ class Accounts(object):
 
         self.api.gen_auth()
 
-    def _get_accounts(self, *pargs: list, **kwargs: dict) -> requests.Response:
-        """API: Get page of accounts
-
-        Get a page of accounts from the rackspace API
-
-        Args:
-        
-        Returns:
-           requests.Response: Response of the request
-
-        Raises:
-           None
-        """
-        path = f'{self.api._accounts_path()}/'
-
-        return self.api.get(path, *pargs, **kwargs)
-
-    def get_accounts(self, limit=None, *pargs: list, **kwargs: dict) -> dict:
+    def get(self, limit=None, *pargs: list, **kwargs: dict) -> dict:
         """API: Get list of accounts
 
         Get a list of all accounts, instantiating Account objects for them
@@ -51,8 +34,10 @@ class Accounts(object):
         """
         accounts = {}
 
+        path = f'{self.api._accounts_path()}/'
+
         while True:
-            response = self._get_accounts(*pargs, **kwargs)
+            response = self.api.get(path, *pargs, **kwargs)
             assert response.status_code == 200 and response.text
             data = response.json()
 

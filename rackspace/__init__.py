@@ -1,6 +1,4 @@
 from .api import Api
-from .aliases import Aliases
-from .accounts import Accounts
-from .account import Account
-from .alias import Alias
+from .account import Account, Accounts
+from .alias import Alias, Aliases
 #from .spam import Spam

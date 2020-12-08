@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import json
-
-DEBUG = True
-
+DEBUG = False
+PAGE_SIZE = 50
 
 class DuplicateLoadError(Exception):
+    pass
+
+
+class RetrieveLimit(Exception):
     pass
 
 
@@ -16,6 +18,17 @@ class Alias(object):
        name (str): Name of alias, without domain
        addresses (:list:`str`): List of email targets for alias
     """
+    def __init__(self, name: str, api: Api =None, debug: bool =DEBUG, *pargs, **kwargs) -> None:
+        self.name = name
+        self.addresses = []
+        self.loaded = False
+        self.debug = debug
+
+        if api is not None:
+            self.api = api
+
+        self.__load(*pargs, **kwargs)
+
     def __str__(self) -> None:
         return f'''Alias({{name: "{self.name}", addresses: ["{'", "'.join(self.addresses)}"]}})'''
 
@@ -83,16 +96,6 @@ class Alias(object):
             raise
 
         self.loaded = True
-
-    def __init__(self, name: str, api: Api =None, *pargs, **kwargs) -> None:
-        self.name = name
-        self.addresses = []
-        self.loaded = False
-
-        if api is not None:
-            self.api = api
-
-        self.__load(*pargs, **kwargs)
 
     def add_address(self, address: str) -> None:
         """Add new address to alias
@@ -184,7 +187,7 @@ class Alias(object):
 
         data = {'aliasEmails': ','.join(self.addresses)}
 
-        if DEBUG:
+        if self.debug:
             print(f"\n{path}\n   ALIAS ADD: {{'{self.name}' => {self.addresses}}}")
         else:
             response = self.api.post(path, data, *pargs, **kwargs)
@@ -209,7 +212,7 @@ class Alias(object):
 
         data = {'aliasEmails': ','.join(self.addresses)}
 
-        if DEBUG:
+        if self.debug:
             print(f"\n{path}\n   ALIAS REPLACE: {{'{self.name}' => {self.addresses}}}")
         else:
             response = self.api.put(path, data, *pargs, **kwargs)
@@ -231,7 +234,7 @@ class Alias(object):
         """
         path = f'{self.api._alias_path(self.name)}'
 
-        if DEBUG:
+        if self.debug:
             print(f"\n{path}\n   ALIAS REMOVE: '{self.name}'")
         else:
             response = self.api.delete(path, *pargs, **kwargs)
@@ -267,8 +270,85 @@ class Alias(object):
             func = self.api.delete
             xxx = 'remove: {address}'
 
-        if DEBUG:
+        if self.debug:
             print(f"\n{path}\n   ALIAS UPDATE: {self.name} => {xxx}")
         else:
             response = func(path, data={}, *pargs, **kwargs)
             return self.api._success(response)
+
+
+class Aliases(object):
+    def __init__(self, api: Api, debug: bool =DEBUG) -> None:
+        self.api = api
+        self.debug = debug
+
+        # Ensure api is ready to make connections
+        self.api.gen_auth()
+
+    def get(self, limit=None, *pargs: list, **kwargs: dict) -> dict:
+        """API: Get list of aliases
+
+        Get a list of all aliases, instantiating Alias objects for them
+
+        Args:
+           limit (int, optional): Maximum number of aliases to return
+           size (int, optional): Number of entries per page to retieve at a time, default 50
+           offset (int, optional): Page number to get `size` entries
+
+        Returns:
+           dict: {`name`: Alias()} list of aliases
+
+        Raises:
+           None
+        """
+        aliases = {}
+
+        ### size = kwargs['size'] if 'size' in kwargs else PAGE_SIZE
+        ### offset = kwargs['offset'] if 'offset' in kwargs else 0
+        ### print(f'get_aliases(offset={offset}, size={size})')
+
+        path = f'{self.api._aliases_path()}/'
+
+        while True:
+            response = self.api.get(path, *pargs, **kwargs)
+            assert response.status_code == 200 and response.text
+            data = response.json()
+
+            try:
+                # Loop over each entry
+                for idx, alias in enumerate(data['aliases']):
+
+                    # If we specified a limit to retrieve, disable the outer loop and 
+                    if isinstance(limit, int) and len(aliases) >= limit:
+                        raise RetrieveLimit
+
+                    ### print(f'get_aliases()[{idx + data["offset"]}] => {alias}')
+
+                    alias_obj = Alias(alias['name'], api=self.api, debug=self.debug)
+                    # If target is a single address, we have all the info needed
+                    if alias['numberOfMembers'] == 1:
+                        alias_obj.load(data=alias)
+
+                    # If there are more than 1 target, we don't have the addresses
+                    # and have to call the api to load the members instead
+                    elif alias['numberOfMembers'] > 1:
+                        alias_obj = alias_obj.get()
+
+                    # Save the alias to our dictionary
+                    aliases.update({alias_obj.name: alias_obj})
+
+            # If we hit the limit, break the main loop
+            except RetrieveLimit:
+                break
+
+            # If this is the last page of info, break the main loop
+            if data['offset'] + data['size'] > data['total']:
+                break
+
+            # Not the last page, set data to get next page
+            # and loop again
+            kwargs['size'] = data['size']
+            kwargs['offset'] = data['offset'] + data['size']
+
+        return aliases
+

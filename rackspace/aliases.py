@@ -3,10 +3,8 @@ from __future__ import annotations
 import requests
 
 from .alias import Alias
-from .api import Api
 
 PAGE_SIZE = 50
-
 
 class RetrieveLimit(Exception):
     pass
@@ -19,24 +17,7 @@ class Aliases(object):
         # Ensure api is ready to make connections
         self.api.gen_auth()
 
-    def _get_aliases(self, *pargs: list, **kwargs: dict) -> requests.Response:
-        """API: Get page of aliases
-
-        Get a page of aliases from the rackspace API
-
-        Args:
-
-        Returns:
-           requests.Response: Response of the request
-
-        Raises:
-           None
-        """
-        path = f'{self.api._aliases_path()}/'
-
-        return self.api.get(path, *pargs, **kwargs)
-
-    def get_aliases(self, limit=None, *pargs: list, **kwargs: dict) -> dict:
+    def get(self, limit=None, *pargs: list, **kwargs: dict) -> dict:
         """API: Get list of aliases
 
         Get a list of all aliases, instantiating Alias objects for them
@@ -58,8 +39,10 @@ class Aliases(object):
         ### offset = kwargs['offset'] if 'offset' in kwargs else 0
         ### print(f'get_aliases(offset={offset}, size={size})')
 
+        path = f'{self.api._aliases_path()}/'
+
         while True:
-            response = self._get_aliases(*pargs, **kwargs)
+            response = self.api.get(path, *pargs, **kwargs)
             assert response.status_code == 200 and response.text
             data = response.json()
 
