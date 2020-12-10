@@ -435,7 +435,7 @@ class Accounts(object):
 
                     account = Account(account_meta['name'], api=self.api, debug=self.debug).get()
                     #account = self.get_account(account_meta['name'])
-                    accounts.update({account.name: account})
+                    accounts.update({account.name.lower(): account})
 
             except RetrieveLimit:
                 break
