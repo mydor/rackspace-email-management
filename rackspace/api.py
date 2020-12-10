@@ -237,7 +237,7 @@ class Api(object):
         return self.headers
 
     @rate_limit(120)
-    def get(self, path: str, *pargs, **kwargs) -> requests.Response:
+    def get(self, *pargs, **kwargs) -> requests.Response:
         """API: `get` data from the rackspace API
 
         Requests data from the Rackspace API, ensuring we don't exceed our `get` rate limit
@@ -251,13 +251,7 @@ class Api(object):
         Raises:
            None
         """
-        URL = self._url(path)
-
-        params, args = self._params(*pargs, **kwargs)
-
-        print(''.join((URL,args)))
-
-        return requests.get( URL, headers=self._headers(), params=params)
+        return self.__send(requests.get, *pargs, **kwargs)
 
     @rate_limit(90, 'send')
     def put(self, *pargs, **kwargs) -> requests.Response:
@@ -267,7 +261,7 @@ class Api(object):
         our `send` rate limit
 
         NOTES:
-           See `__putpost()`
+           See `__send()`
 
         Args:
 
@@ -277,7 +271,7 @@ class Api(object):
         Raises:
            None
         """
-        return self.__putpost(requests.put, *pargs, **kwargs)
+        return self.__send(requests.put, *pargs, **kwargs)
 
     @rate_limit(90, 'send')
     def post(self, *pargs, **kwargs) -> requests.Response:
@@ -287,7 +281,7 @@ class Api(object):
         our `send` rate limit
 
         NOTES:
-           See `__putpost()`
+           See `__send()`
 
         Args:
 
@@ -297,12 +291,12 @@ class Api(object):
         Raises:
            None
         """
-        return self.__putpost(requests.post, *pargs, **kwargs)
+        return self.__send(requests.post, *pargs, **kwargs)
 
-    def __putpost(self, func: function, path: str, data: dict, *pargs, **kwargs) -> requests.Response:
-        """API: Private method for `put` and `post`
+    def __send(self, func: function, path: str, data: dict =None, *pargs, **kwargs) -> requests.Response:
+        """API: Private method for `get`, `put`, `post`, and `delete`
 
-        Private method to do the work of `put` and `post`, as they are basically identical
+        Private method to do the work of `get`, `put`, `post`, and `delete`, as they are basically identical
         in how they are called
 
         Args:
@@ -319,20 +313,21 @@ class Api(object):
         URL = self._url(path)
 
         params, args = self._params(*pargs, **kwargs)
-        print(''.join((URL,args)))
+        print('{} {}'.format(func.__name__.upper(), ''.join((URL,args))))
 
         return func(URL, data=data, headers=self._headers(), params=params)
 
     @rate_limit(90, 'send')
-    def delete(self, path: str, data: dict =None, *pargs, **kwargs) -> requests.Response:
+    def delete(self, *pargs, **kwargs) -> requests.Response:
         """API: Delete resource from Rackspace
 
         Delete the resource from the Rackspace API, ensuring we do not exceed
         our `send` rate limit
 
+        NOTES:
+           See `__send()`
+
         Args:
-           path (str): API path for this request
-           data (dict): Data to be sent to the API
 
         Returns:
            requests.Response: Response for the DELETE call
@@ -340,12 +335,7 @@ class Api(object):
         Raises:
            None
         """
-        URL = self._url(path)
-
-        params, args = self._params(*pargs, **kwargs)
-        print(''.join((URL,args)))
-
-        return requests.delete( URL, headers=self._headers(), params=params)
+        return self.__send(requests.delete, *pargs, **kwargs)
 
     def _url(self, path: str) -> str:
         """Construct the full URL for an API call

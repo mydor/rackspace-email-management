@@ -335,7 +335,7 @@ class Aliases(object):
                         alias_obj = alias_obj.get()
 
                     # Save the alias to our dictionary
-                    aliases.update({alias_obj.name: alias_obj})
+                    aliases.update({alias_obj.name.lower(): alias_obj})
 
             # If we hit the limit, break the main loop
             except RetrieveLimit:

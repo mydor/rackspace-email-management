@@ -9,6 +9,7 @@ import os
 import yaml
 
 CONFIG_FILE = 'conf.yml'
+CONFIG_DIR  = 'conf.d'
 DEBUG = False
 
 def load_config(name=None):
@@ -24,7 +25,7 @@ def load_config(name=None):
         domains = {}
 
         for domain in data['domains']:
-            domain_file = '{}.yml'.format(os.path.join(data['conf_dir'], domain))
+            domain_file = '{}.yml'.format(os.path.join(data.get('conf_dir', CONFIG_DIR), domain))
             domain_data = load_config(domain_file)
             domains[domain] = domain_data
 
@@ -41,7 +42,7 @@ def _init_accounts(domain, data, api):
         _acct_data['name'] = acct_name
 
         account = Account(acct_name, data=_acct_data, api=api, debug=DEBUG)
-        accounts.update({acct_name: account})
+        accounts.update({acct_name.lower(): account})
 
         #print(f'{domain} - {account}')
         if 'aliases' not in _acct_data:
@@ -49,11 +50,12 @@ def _init_accounts(domain, data, api):
 
         for _alias in _acct_data['aliases']:
             alias = _alias.replace(f'@{domain}', '')
+            alias_lc = alias.lower()
             if alias not in aliases:
-                aliases[alias] = Alias(name=alias, address=_acct_name, api=api, debug=DEBUG)
+                aliases[alias_lc] = Alias(name=alias, address=_acct_name, api=api, debug=DEBUG)
 
             else:
-                aliases[alias].add_address(_acct_name)
+                aliases[alias_lc].add_address(_acct_name)
 
             #print(f'-  {aliases[name]}')
 
@@ -64,45 +66,39 @@ def _init_accounts(domain, data, api):
 def process_accounts(cfg_accounts, rs_accounts):
     for name, account in cfg_accounts.items():
 
-        name_lc = name.lower()
-        if name_lc not in rs_accounts:
+        if name not in rs_accounts:
             ### print(f'ADD: account {name}')
-
             account.add()
 
         else:
-            diff = account.diff(rs_accounts[name_lc])
+            diff = account.diff(rs_accounts[name])
             if len(diff):
                 ### print(f'UPDATE: account {name}')
                 ### print(f' - {diff}')
                 account.update(diff)
 
-    cfg_accounts_lc = set(k.lower() for k in cfg_accounts)
     for name, account in rs_accounts.items():
-        if name not in cfg_accounts_lc:
+        if name not in cfg_accounts:
             ### print(f'DEL: account {name}')
             account.remove()
 
 def process_aliases(cfg_aliases, rs_aliases):
     for name, alias in cfg_aliases.items():
 
-        name_lc = name.lower()
-        if name_lc not in rs_aliases:
+        if name not in rs_aliases:
             ### print(f'ADD: alias {name}')
             ### print(f'  - {cfg_aliases[name].addresses}')
-            ### print(alias)
             alias.add()
 
         else:
-            diff = alias.diff(rs_aliases[name_lc])
+            diff = alias.diff(rs_aliases[name])
             if diff['changes']:
                 ### print(f'UPDATE: alias {name}')
                 ### print(f'  - {diff}')
                 alias.replace()
 
-    cfg_aliases_lc = set(k.lower() for k in cfg_aliases)
     for name, alias in rs_aliases.items():
-        if name not in set(k.lower() for k in cfg_aliases):
+        if name not in cfg_aliases:
             ### print(f'DEL: alias {name}')
             alias.remove()
 
