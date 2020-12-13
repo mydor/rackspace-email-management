@@ -1,4 +1,7 @@
 from __future__ import annotations
+from typing import Any, Optional
+
+from .api import Api
 
 DEBUG = False
 
@@ -110,6 +113,9 @@ class Account(object):
         self.loaded = False
         self.debug = debug
 
+        # Store a copy of the data set, will be useful for the spam module
+        self.data = None
+
         if api is not None:
             self.api = api
 
@@ -118,8 +124,9 @@ class Account(object):
 
         if data:
             self._load(data)
+            self.data = data
 
-    def __str__(self) -> None:
+    def __str__(self) -> str:
         data = f'name: "{self.name}"'
         for field in self.__class__.__FIELDS:
             if field == 'name':
@@ -133,7 +140,7 @@ class Account(object):
         data = f'Account({{{data}}})'
         return data
 
-    def __repr__(self) -> None:
+    def __repr__(self) -> str:
         return self.__str__()
 
     def _load(self, data: dict, _sub=False) -> None:
@@ -240,10 +247,13 @@ class Account(object):
             if field in readonly or field in ignore:
                 continue
 
+            default: Any = None
             if fields[field] is str:
                 default = ''
+
             elif fields[field] is int:
                 default = 0
+
             elif fields[field] is bool:
                 default = False
 
@@ -255,7 +265,7 @@ class Account(object):
 
         return diff
 
-    def get(self, *pargs: list, **kwargs: dict) -> Account:
+    def get(self, *pargs: list, **kwargs: dict) -> Optional[Account]:
         """API: Get the account data from rackspace
 
         Calls the rackspace API to retrieve the account data
@@ -305,6 +315,7 @@ class Account(object):
                 if field in readonly:
                     continue
                 
+                default: Any = None
                 if data_type is str:
                     default = ''
                 elif data_type is int:
@@ -324,6 +335,7 @@ class Account(object):
 
         if self.debug:
             print(f"\n{path}\n   ACCOUNT ADD: '{self.name}'")
+            return True
         else:
             response = self.api.post(path, data, *pargs, **kwargs)
             return self.api._success(response)
@@ -345,6 +357,7 @@ class Account(object):
 
         if self.debug:
             print(f"\n{path}\n   ACCOUNT REMOVE: '{self.name}'")
+            return True
         else:
             response = self.api.delete(path, *pargs, **kwargs)
             return self.api._success(response)
@@ -367,9 +380,10 @@ class Account(object):
 
         if self.debug:
             print(f"\n{path}\n   ACCOUNT RENAME: '{self.name}' -> '{newname}'")
+            return True
         else:
             response = self.api.put(path, data={'name': newname}, *pargs, **kwargs)
-            return self.api._succes_success(response)
+            return self.api._success(response)
 
     def update(self, data: dict, *pargs: list, **kwargs: dict) -> bool:
         """API: Update the account in rackspace
@@ -389,6 +403,7 @@ class Account(object):
 
         if self.debug:
             print(f"\n{path}\n   ACCOUNT UPDATE: '{self.name}' => {data}")
+            return True
         else:
             response = self.api.put(path, data=data, *pargs, **kwargs)
             return self.api._success(response)
@@ -417,7 +432,7 @@ class Accounts(object):
         Raises:
            None
         """
-        accounts = {}
+        accounts: dict = {}
 
         path = f'{self.api._accounts_path()}/'
 
@@ -427,14 +442,13 @@ class Accounts(object):
             data = response.json()
 
             try:
-                for idx, account_meta in enumerate(data['rsMailboxes']):
+                for account_meta in data['rsMailboxes']:
                     if isinstance(limit, int) and len(accounts) >= limit:
                         raise RetrieveLimit
 
-                    ### print(f'get_accounts()[{idx + data["offset"]}] => {account_meta}')
-
                     account = Account(account_meta['name'], api=self.api, debug=self.debug).get()
-                    #account = self.get_account(account_meta['name'])
+                    assert account is not None
+
                     accounts.update({account.name.lower(): account})
 
             except RetrieveLimit:

@@ -1,6 +1,5 @@
 from __future__ import annotations
-
-#import rackspace.Api
+from typing import Optional, Tuple, Callable
 
 import base64
 import datetime
@@ -13,8 +12,8 @@ import time
 import yaml
 
 # a = Api('eGbq9/2hcZsRlr1JV1Pi', 'QHOvchm/40czXhJ1OxfxK7jDHr3t', time_stamp=20010317143725, user_agent='Rackspace Management Interface')
-API_URL = 'https://api.emailsrvr.com'
-RATE_LIMIT = {}
+API_URL: str = 'https://api.emailsrvr.com'
+RATE_LIMIT: dict = {}
 
 def rate_limit(rate: int =90, _id: str =None):
     """DECORATOR: Wrap a method to rate limit calls
@@ -56,11 +55,11 @@ class Api(object):
     def __init__(self,
             user_key: str,
             secret_key: str,
-            customer_id: int = None,
-            api_url: str =API_URL,
-            time_stamp: str =None,
-            user_agent: str =None,
-            domain: str =None,
+            customer_id: str = None,
+            api_url: str = API_URL,
+            time_stamp: str = None,
+            user_agent: str = None,
+            domain: str = None,
             *pargs,
             **kwargs
             ) -> None:
@@ -102,15 +101,15 @@ class Api(object):
         if time_stamp is None:
             time_stamp = '{:%Y%m%d%H%M%S}'.format(datetime.datetime.now())
 
-        self.headers = headers
-        self.time_stamp = time_stamp
-        self.user_key = user_key
-        self.secret_key = secret_key
-        self.user_agent = user_agent
-        self.api_url = api_url
+        self.headers: dict = headers
+        self.time_stamp: str = time_stamp
+        self.user_key: str = user_key
+        self.secret_key: str = secret_key
+        self.user_agent: str = user_agent
+        self.api_url: str = api_url
 
-        self.token_sha = None
-        self.auth_token = None
+        self.token_sha: Optional[str] = None
+        self.auth_token: Optional[str] = None
 
     @property
     def customer(self) -> str:
@@ -196,7 +195,7 @@ class Api(object):
         return self.token_sha
 
     @staticmethod
-    def _params(*pargs, **kwargs) -> (dict, str):
+    def _params(*pargs, **kwargs) -> Tuple[dict, str]:
         """Create a shallow copy of kwargs
 
         Creates a shallow copy of kwargs and data for debug
@@ -293,7 +292,7 @@ class Api(object):
         """
         return self.__send(requests.post, *pargs, **kwargs)
 
-    def __send(self, func: function, path: str, data: dict =None, *pargs, **kwargs) -> requests.Response:
+    def __send(self, func: Callable, path: str, data: dict =None, *pargs, **kwargs) -> requests.Response:
         """API: Private method for `get`, `put`, `post`, and `delete`
 
         Private method to do the work of `get`, `put`, `post`, and `delete`, as they are basically identical
@@ -471,8 +470,8 @@ class Api(object):
         """
         logging.disable(level)
 
-        delattr(http.client, 'print')
-        http.client.HTTPConnection.debuglevel = 0
+        delattr(http.client, 'print') # type: ignore
+        http.client.HTTPConnection.debuglevel = 0 # type: ignore
 
     @staticmethod
     def httpclient_logging_patch(level: int =logging.DEBUG) -> None:
@@ -495,9 +494,9 @@ class Api(object):
         def httpclient_log(*pargs):
             httpclient_logger.log(level, ' '.join(pargs))
     
-        http.client.print = httpclient_log
+        http.client.print = httpclient_log # type: ignore
     
-        http.client.HTTPConnection.debuglevel = 1
+        http.client.HTTPConnection.debuglevel = 1 # type: ignore
 
     @staticmethod
     def _success(response: requests.Response, status_code: int =200) -> bool:

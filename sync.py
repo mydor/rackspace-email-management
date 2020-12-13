@@ -1,7 +1,7 @@
 #!/bin/env python3
 
 from rackspace import Account, Accounts
-from rackspace import Alias, Aliases
+from rackspace import Alias, Aliases, Spam
 from rackspace import Api
 
 import json
@@ -11,6 +11,7 @@ import yaml
 CONFIG_FILE = 'conf.yml'
 CONFIG_DIR  = 'conf.d'
 DEBUG = False
+#DEBUG = True
 
 def load_config(name=None):
     if name is None:
@@ -37,11 +38,10 @@ def _init_accounts(domain, data, api):
     accounts = {}
     aliases = {}
 
-    for _acct_name, _acct_data in data.items():
-        acct_name = _acct_name.replace(f'@{domain}', '')
-        _acct_data['name'] = acct_name
+    for acct_name, _acct_data in data.items():
+        email = f'{acct_name}@{domain}'
 
-        account = Account(acct_name, data=_acct_data, api=api, debug=DEBUG)
+        account = Account(email, data=data[acct_name], api=api, debug=DEBUG)
         accounts.update({acct_name.lower(): account})
 
         #print(f'{domain} - {account}')
@@ -52,10 +52,10 @@ def _init_accounts(domain, data, api):
             alias = _alias.replace(f'@{domain}', '')
             alias_lc = alias.lower()
             if alias not in aliases:
-                aliases[alias_lc] = Alias(name=alias, address=_acct_name, api=api, debug=DEBUG)
+                aliases[alias_lc] = Alias(name=alias, address=email, api=api, debug=DEBUG)
 
             else:
-                aliases[alias_lc].add_address(_acct_name)
+                aliases[alias_lc].add_address(email)
 
             #print(f'-  {aliases[name]}')
 
@@ -64,6 +64,7 @@ def _init_accounts(domain, data, api):
     return accounts, aliases
 
 def process_accounts(cfg_accounts, rs_accounts):
+    print('- Accounts(process)')
     for name, account in cfg_accounts.items():
 
         if name not in rs_accounts:
@@ -77,12 +78,16 @@ def process_accounts(cfg_accounts, rs_accounts):
                 ### print(f' - {diff}')
                 account.update(diff)
 
+        if getattr(account, 'data') and 'spam' in account.data:
+            process_spam(account.api, account.data['spam'], name=name)
+
     for name, account in rs_accounts.items():
         if name not in cfg_accounts:
             ### print(f'DEL: account {name}')
             account.remove()
 
 def process_aliases(cfg_aliases, rs_aliases):
+    print('- Aliases(process)')
     for name, alias in cfg_aliases.items():
 
         if name not in rs_aliases:
@@ -102,22 +107,39 @@ def process_aliases(cfg_aliases, rs_aliases):
             ### print(f'DEL: alias {name}')
             alias.remove()
 
-def process_account_spam(cfg_spam, rs_spam):
-    pass
+def process_spam(api, data, name=None):
+    if name is None:
+        print(f'- Spam {api.domain}')
+    else:
+        print(f'- Spam {name}@{api.domain}')
+    cfg_spam = Spam(api=api, data=data, name=name, debug=DEBUG)
+    rs_spam = cfg_spam.get()
+
+    if cfg_spam != rs_spam:
+        diff = cfg_spam.diff(rs_spam)
+        cfg_spam.set(diff)
 
 def process_domain(domain, data, api):
-    accounts, aliases = _init_accounts(domain, data, api)
-
     api.set_domain(domain)
 
     print(domain)
+
+    if 'spam' in data:
+        process_spam(api, data['spam'])
+
+    if 'accounts' in data:
+        print('- Accounts/Aliases(get)')
+        accounts, aliases = _init_accounts(domain, data['accounts'], api)
+
+        process_accounts(accounts, Accounts(api, debug=DEBUG).get())
+        process_aliases(aliases, Aliases(api, debug=DEBUG).get())
+
+    #api.set_domain(domain)
+
     ### print(accounts)
     ### print('----------')
     ### print(Accounts(api).get())
     ### raise
-
-    process_accounts(accounts, Accounts(api, debug=DEBUG).get())
-    process_aliases(aliases, Aliases(api, debug=DEBUG).get())
 
 if __name__ == '__main__':
     CONFIG = load_config()
@@ -130,4 +152,5 @@ if __name__ == '__main__':
 
         if domain == 'XXXmoonlightimagery.com':
             continue
-        process_domain(domain, domain_cfg['accounts'], api)
+
+        process_domain(domain, domain_cfg, api)

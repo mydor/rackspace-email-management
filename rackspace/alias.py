@@ -1,7 +1,10 @@
 from __future__ import annotations
+from typing import List, Optional
 
-DEBUG = False
-PAGE_SIZE = 50
+from .api import Api
+
+DEBUG: bool = False
+PAGE_SIZE: int = 50
 
 class DuplicateLoadError(Exception):
     pass
@@ -19,20 +22,20 @@ class Alias(object):
        addresses (:list:`str`): List of email targets for alias
     """
     def __init__(self, name: str, api: Api =None, debug: bool =DEBUG, *pargs, **kwargs) -> None:
-        self.name = name
-        self.addresses = []
-        self.loaded = False
-        self.debug = debug
+        self.name: str = name
+        self.addresses: List[str] = []
+        self.loaded: bool = False
+        self.debug: bool = debug
 
         if api is not None:
             self.api = api
 
         self.__load(*pargs, **kwargs)
 
-    def __str__(self) -> None:
+    def __str__(self) -> str:
         return f'''Alias({{name: "{self.name}", addresses: ["{'", "'.join(self.addresses)}"]}})'''
 
-    def __repr__(self) -> None:
+    def __repr__(self) -> str:
         return self.__str__()
 
     def load(self, data: dict =None) -> None:
@@ -93,7 +96,7 @@ class Alias(object):
             self.addresses = data['emailAddressList']['emailAddress']
 
         else:
-            raise
+            raise Exception('Should never be here')
 
         self.loaded = True
 
@@ -137,7 +140,7 @@ class Alias(object):
         # Since the only content of an alias is a list of target addresses
         # we need to return what is new, to add
         # and what is old, to remove
-        diff = {'add': [], 'del': [], 'changes': 0}
+        diff: dict = {'add': [], 'del': [], 'changes': 0}
 
         for src, dst, key in ((self, other_alias, 'add'), (other_alias, self, 'del')):
             for address in src.addresses:
@@ -147,7 +150,7 @@ class Alias(object):
 
         return diff
 
-    def get(self, *pargs, **kwargs) -> Alias:
+    def get(self, *pargs, **kwargs) -> Optional[Alias]:
         """API: Get the alias data from rackspace
 
         Calls the rackspace API to retrieve target
@@ -189,6 +192,7 @@ class Alias(object):
 
         if self.debug:
             print(f"\n{path}\n   ALIAS ADD: {{'{self.name}' => {self.addresses}}}")
+            return True
         else:
             response = self.api.post(path, data, *pargs, **kwargs)
             return self.api._success(response)
@@ -214,6 +218,7 @@ class Alias(object):
 
         if self.debug:
             print(f"\n{path}\n   ALIAS REPLACE: {{'{self.name}' => {self.addresses}}}")
+            return True
         else:
             response = self.api.put(path, data, *pargs, **kwargs)
             return self.api._success(response)
@@ -236,6 +241,7 @@ class Alias(object):
 
         if self.debug:
             print(f"\n{path}\n   ALIAS REMOVE: '{self.name}'")
+            return True
         else:
             response = self.api.delete(path, *pargs, **kwargs)
             return self.api._success(response)
@@ -269,9 +275,13 @@ class Alias(object):
         elif remove:
             func = self.api.delete
             xxx = 'remove: {address}'
+        
+        else:
+            raise Exception('Should not be here')
 
         if self.debug:
             print(f"\n{path}\n   ALIAS UPDATE: {self.name} => {xxx}")
+            return True
         else:
             response = func(path, data={}, *pargs, **kwargs)
             return self.api._success(response)
@@ -301,7 +311,7 @@ class Aliases(object):
         Raises:
            None
         """
-        aliases = {}
+        aliases: dict = {}
 
         ### size = kwargs['size'] if 'size' in kwargs else PAGE_SIZE
         ### offset = kwargs['offset'] if 'offset' in kwargs else 0
@@ -316,7 +326,7 @@ class Aliases(object):
 
             try:
                 # Loop over each entry
-                for idx, alias in enumerate(data['aliases']):
+                for alias in data['aliases']:
 
                     # If we specified a limit to retrieve, disable the outer loop and 
                     if isinstance(limit, int) and len(aliases) >= limit:
@@ -325,6 +335,7 @@ class Aliases(object):
                     ### print(f'get_aliases()[{idx + data["offset"]}] => {alias}')
 
                     alias_obj = Alias(alias['name'], api=self.api, debug=self.debug)
+
                     # If target is a single address, we have all the info needed
                     if alias['numberOfMembers'] == 1:
                         alias_obj.load(data=alias)
@@ -332,7 +343,7 @@ class Aliases(object):
                     # If there are more than 1 target, we don't have the addresses
                     # and have to call the api to load the members instead
                     elif alias['numberOfMembers'] > 1:
-                        alias_obj = alias_obj.get()
+                        alias_obj = alias_obj.get() # type: ignore
 
                     # Save the alias to our dictionary
                     aliases.update({alias_obj.name.lower(): alias_obj})
