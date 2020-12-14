@@ -11,10 +11,14 @@ import requests
 import time
 import yaml
 
-# a = Api('eGbq9/2hcZsRlr1JV1Pi', 'QHOvchm/40czXhJ1OxfxK7jDHr3t', time_stamp=20010317143725, user_agent='Rackspace Management Interface')
 API_URL: str = 'https://api.emailsrvr.com'
 RATE_LIMIT: dict = {}
 
+# Note: Rackspace returns "403 Forbidden" for rate limit responses,
+# instead of the correct "429 Too Many Requests".
+# As they publish what the limits are, I just wrap the request
+# calls with the rate_limit decorator to pre-throttle the calls
+# and prevent the 403.
 def rate_limit(rate: int =90, _id: str =None):
     """DECORATOR: Wrap a method to rate limit calls
 
@@ -81,6 +85,9 @@ class Api(object):
 
         Raises:
            None
+    
+        Example:
+           api = Api('eGbq9/2hcZsRlr1JV1Pi', 'QHOvchm/40czXhJ1OxfxK7jDHr3t', time_stamp=20010317143725, user_agent='Rackspace Management Interface')
         """
         headers = requests.utils.default_headers()
 
@@ -182,13 +189,10 @@ class Api(object):
            None
         """
         base_str = f'{self.user_key}{self.user_agent}{self.time_stamp}{self.secret_key}'
-        ### print(base_str)
 
         sha1 = hashlib.sha1(base_str.encode())
-        ### print(sha1.hexdigest())
 
         b64 = base64.b64encode(sha1.digest())
-        ### print(b64.decode())
 
         self.token_sha = b64.decode()
 

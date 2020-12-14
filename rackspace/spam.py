@@ -8,6 +8,16 @@ from .api import Api
 import json
 import copy
 
+# NOTE: Spam settings are stored in 5 separate endpoints each, for
+# both domains AND accounts.  These consist of the 'settings',
+# and ACL lists 'blocklist', 'ipblocklist', 'safelist', and 'ipsafelist'
+#
+# Domain spam settings include both Rackspace Email spam settings
+# AND exchange spam settings.
+#
+# Account spam settings are EITHER Rackspace Email spam settings,
+# OR exchange spam settings, depending on the context of the account
+
 DEBUG = False
 VALID_ACL = ('blocklist', 'ipblocklist', 'safelist', 'ipsafelist')
 
@@ -191,7 +201,6 @@ class Spam(object):
         # Add settings as a list of changes
         if self.settings != other.settings:
             diff.append('settings')
-            ### self.settings.diff(other.settings)
 
         # Check each acl for changes
         for acl in set(self.acl) | set(other.acl):
@@ -302,18 +311,10 @@ class Settings(object):
         if api is not None:
             self.api = api
 
-        # Deep Copy to prevent accidential mutable defaults
-        # from popping up.  I.E.
-        # a = Settings()  from config
-        # b = a.get()  get rackspace settings.  This could override
-        #              the settings in 'a', because they started from
-        #              the same dictionary of objects
-        self.settings = copy.deepcopy(self._get_fields())
+        self.settings = self._get_fields()
 
         if data is not None:
             self.load(data)
-        ### for k,v in self.settings.items():
-        ###     print(f'{k!r}: {v!r}')
 
     def __eq__(self, other):
         if len(self.settings) != len(other.settings):
@@ -403,7 +404,6 @@ class Settings(object):
         for k in set(self.settings) | set(other.settings):
             if self.settings[k] != other.settings[k]:
                 diff.append((k, self.settings[k].get(), other.settings[k].get()))
-                ### print(f'{diff[-1][0]!r}: {diff[-1][1]!r} != {diff[-1][2]!r}')
         return diff
 
     def load(self, data: dict, src: str ='cfg') -> None:
@@ -419,12 +419,11 @@ class Settings(object):
         Raises:
             None
         """
-        # shortcut to reduce typing
         settings = self.settings
 
         # yaml 'on' becomes True and 'off' becomes False.  These
         # need to stay 'on' and 'off'
-        k = 'filterLevel' # another shortcut
+        k = 'filterLevel'
         if k in data:
             # save the fixed value in the Field of the setting
             settings[k].set(self.__fix_value(k, data[k]))
@@ -521,7 +520,12 @@ class Settings(object):
         else:
             fields = cls.__ACCOUNT_RS_FIELDS
 
-        # Ensure we deepcopy so we don't have the mutable defaults propigation bug
+        # Deep Copy to prevent accidential mutable defaults
+        # from popping up.  I.E.
+        # a = Settings()  from config
+        # b = a.get()  get rackspace settings.  This could override
+        #              the settings in 'a', because they started from
+        #              the same dictionary of objects
         return copy.deepcopy(fields)
 
     def set(self, override: bool =None, *pargs, **kwargs) -> bool:
@@ -539,7 +543,6 @@ class Settings(object):
         account = self._get_account_path()
         path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}{account}/spam/settings'
 
-        # Default override from object if not passed
         if override is None:
             override = self.override
 
@@ -558,7 +561,7 @@ class Settings(object):
             for x in ('hasFolderCleaner', 'spamFolderAgeLimit', 'spamFolderNumLimit'):
                 data.pop(f'rsEmail.{x}')
 
-        # Make sure to set the override setting 
+        # Make sure to set the override setting, if set
         if override:
             data.update({'overrideUserSettings': Field(bool, True)})
 
@@ -709,11 +712,9 @@ class ACL(object):
         for k in list(diff):
             v = diff[k]
 
-            # If there are no values, remove the key
             if not v:
                 diff.pop(k)
 
-            # convert the values from a set to a comma separated string
             else:
                 diff[k] = ','.join(v)
 
@@ -745,78 +746,73 @@ class ACL(object):
             response = self.api.put(path, data, *pargs, **kwargs)
             return self.api._success(response)
 
-### 
-### ### GET /customers/12345678/domains/example.com/spam/settings
-### ### {
-### ###     "exchangeSettings": {
-### ###         "defaultQuarantineOwner": null,
-### ###         "forwardToDomainQuarantine": "off",
-### ###         "quarantineOwner": ""
-### ###     },
-### ###     "filterLevel": "on",
-### ###     "rsEmailSettings": {
-### ###         "hasFolderCleaner": true,
-### ###         "spamFolderAgeLimit": 7,
-### ###         "spamFolderNumLimit": 250,
-### ###         "spamForwardingAddress": "",
-### ###         "spamHandling": "toFolder"
-### ###     }
-### ### }
-### 
-### ### PUT '/customers/me/domains/example.com/spam/settings',
-### ### {
-### ###   'filterLevel' => 'on',
-### ###   'rsEmail.spamHandling' => 'toFolder',
-### ###   'rsEmail.hasFolderCleaner' => 'true',
-### ###   'rsEmail.spamFolderAgeLimit' => '7',
-### ###   'rsEmail.spamFolderNumLimit' => '100',
-### ### }
-### ### GET /customers/12345678/domains/example.com/spam/<blocklist | ipblocklist | safelist | ipsafelist>
-### ### POST /customers/12345678/domains/example.com/spam/<blocklist | ipblocklist | safelist | ipsafelist>/anyone@spam.com
-### ### DELETE /customers/12345678/domains/example.com/spam/<blocklist | ipblocklist | safelist | ipsafelist>/anyone@spam.com
-### ### PUT '/customers/12345678/domains/example.com/spam/<blocklist | ipblocklist | safelist | ipsafelist>',
-### ### {
-### ###   'addList' => '@%.example.com,abc@example.com',
-### ###   'removeList' => '@examp%.com'
-### ### }
-### 
-### 
-### ### GET /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/settings
-### ### PUT /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/settings
-### ### {
-### ###       'filterLevel' => 'on',  
-### ###       'rsEmail.spamHandling' => 'toFolder',
-### ###       'rsEmail.hasFolderCleaner' => 'true',
-### ###       'rsEmail.spamFolderAgeLimit' => '7',
-### ###       'rsEmail.spamFolderNumLimit' => '100',
-### ### }
-### ### GET /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/<blocklist | ipblocklist | safelist | ipsafelist>
-### ### POST /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/<blocklist | ipblocklist | safelist | ipsafelist>/anyone@spam.com
-### ### DELETE /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/<blocklist | ipblocklist | safelist | ipsafelist>/anyone@spam.com
-### ### PUT /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/<blocklist | ipblocklist | safelist | ipsafelist>
-### ### {
-### ###   'addList' => '@%.example.com,abc@example.com',
-### ###   'removeList' => '@examp%.com'
-### ### }
-### 
-### 
-### ### settings:
-### ###    filterLevel: on
-### ###    rsEmail.spamHandling: toFolder
-### ###    rsEmail.hasFolderCleaner: true
-### ###    rsEmail.spamFolderAgeLimit: 14
-### ###    rsEmail.spamFolderNumLimit: 0
-### ###    rsEmail.spamForwardingAddress: ""
-### ### blocklist: []
-### ### ipblocklist: []
-### ### safelist:
-### ###   - "@bayphoto.com"
-### ###   - "@bounce.email.bayphoto.com"
-### ###   - "@email.bayphoto.com"
-### ###   - "bounce-350_HTML-13278537-134399-515003010-744@bounce.email.bayphoto.com"
-### ###   - "bounce-350_HTML-13278537-136453-515003010-744@bounce.email.bayphoto.com"
-### ###   - "bounce-350_HTML-13278537-137710-515003010-744@bounce.email.bayphoto.com"
-### ###   - "bounce-350_HTML-13278537-138783-515003010-744@bounce.email.bayphoto.com"
-### ###   - "bounce-350_HTML-13278537-147881-515003010-744@bounce.email.bayphoto.com"
-### ###   - "bounce-351_HTML-13278537-135299-515003010-744@bounce.email.bayphoto.com"
-### ### ipsafelist: []
+
+### GET /customers/12345678/domains/example.com/spam/settings
+### {
+###     "exchangeSettings": {
+###         "defaultQuarantineOwner": null,
+###         "forwardToDomainQuarantine": "off",
+###         "quarantineOwner": ""
+###     },
+###     "filterLevel": "on",
+###     "rsEmailSettings": {
+###         "hasFolderCleaner": true,
+###         "spamFolderAgeLimit": 7,
+###         "spamFolderNumLimit": 250,
+###         "spamForwardingAddress": "",
+###         "spamHandling": "toFolder"
+###     }
+### }
+
+### PUT '/customers/me/domains/example.com/spam/settings',
+### {
+###   'filterLevel' => 'on',
+###   'rsEmail.spamHandling' => 'toFolder',
+###   'rsEmail.hasFolderCleaner' => 'true',
+###   'rsEmail.spamFolderAgeLimit' => '7',
+###   'rsEmail.spamFolderNumLimit' => '100',
+### }
+### GET /customers/12345678/domains/example.com/spam/<blocklist | ipblocklist | safelist | ipsafelist>
+### POST /customers/12345678/domains/example.com/spam/<blocklist | ipblocklist | safelist | ipsafelist>/anyone@spam.com
+### DELETE /customers/12345678/domains/example.com/spam/<blocklist | ipblocklist | safelist | ipsafelist>/anyone@spam.com
+### PUT '/customers/12345678/domains/example.com/spam/<blocklist | ipblocklist | safelist | ipsafelist>',
+### {
+###   'addList' => '@%.example.com,abc@example.com',
+###   'removeList' => '@examp%.com'
+### }
+
+
+### GET /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/settings
+### PUT /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/settings
+### {
+###       'filterLevel' => 'on',  
+###       'rsEmail.spamHandling' => 'toFolder',
+###       'rsEmail.hasFolderCleaner' => 'true',
+###       'rsEmail.spamFolderAgeLimit' => '7',
+###       'rsEmail.spamFolderNumLimit' => '100',
+### }
+### GET /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/<blocklist | ipblocklist | safelist | ipsafelist>
+### POST /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/<blocklist | ipblocklist | safelist | ipsafelist>/anyone@spam.com
+### DELETE /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/<blocklist | ipblocklist | safelist | ipsafelist>/anyone@spam.com
+### PUT /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/<blocklist | ipblocklist | safelist | ipsafelist>
+### {
+###   'addList' => '@%.example.com,abc@example.com',
+###   'removeList' => '@examp%.com'
+### }
+
+
+### settings:
+###    filterLevel: on
+###    rsEmail.spamHandling: toFolder
+###    rsEmail.hasFolderCleaner: true
+###    rsEmail.spamFolderAgeLimit: 14
+###    rsEmail.spamFolderNumLimit: 0
+###    rsEmail.spamForwardingAddress: ""
+### blocklist: []
+### ipblocklist: []
+### safelist:
+###   - "@bayphoto.com"
+###   - "@bounce.email.bayphoto.com"
+###   - "@email.bayphoto.com"
+###   - "bounce-350_HTML-13278537-134399-515003010-744@bounce.email.bayphoto.com"
+### ipsafelist: []

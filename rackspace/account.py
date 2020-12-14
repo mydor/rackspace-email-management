@@ -5,6 +5,16 @@ from .api import Api
 
 DEBUG = False
 
+# NOTE: The data returned by the Rackspace account API is
+# a multi-level nested dictionary of information.
+#
+# !!! NOTE: This is NOT a valid structure of resource data
+# that can be passed to PUT.
+#
+# The data from GET must be flattened, with the keys renamed
+# and having mutually exclusive attributes removed BEFORE
+# being passed to PUT.
+
 class DuplicateLoadError(Exception):
     pass
 
@@ -177,10 +187,6 @@ class Account(object):
                 self._load(v, _sub=True)
                 continue
 
-            ### elif k == 'spam':
-            ###     self._load_spam(v)
-            ###     continue
-
             elif k == 'emailForwardingAddressList':
                 k = 'enableForwardingAddresses'
                 v = ','.join(v)
@@ -238,9 +244,6 @@ class Account(object):
         fields = self.__class__.__FIELDS
         readonly = self.__class__.__READONLY
         ignore = ['password', 'recoverDeleted', 'name', 'spam']
-
-        ### if getattr(self, 'name') != getattr(other_account, 'name'):
-        ###     raise Exception("Must compare same accounts")
 
         diff = {}
         for field in fields:

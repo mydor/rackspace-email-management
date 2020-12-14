@@ -6,6 +6,14 @@ from .api import Api
 DEBUG: bool = False
 PAGE_SIZE: int = 50
 
+#
+# NOTE: The list of email aliases varies by row, depending on if
+# the alias has a single destination, or multiple.
+# A single destination results in the row having all the information needed 
+# to construct an Alias() object.
+# Multiple destinations requires another GET, for that alias, to retrieve
+# the destination addresses needed to construct an Alias() object
+
 class DuplicateLoadError(Exception):
     pass
 
@@ -313,10 +321,6 @@ class Aliases(object):
         """
         aliases: dict = {}
 
-        ### size = kwargs['size'] if 'size' in kwargs else PAGE_SIZE
-        ### offset = kwargs['offset'] if 'offset' in kwargs else 0
-        ### print(f'get_aliases(offset={offset}, size={size})')
-
         path = f'{self.api._aliases_path()}/'
 
         while True:
@@ -325,14 +329,11 @@ class Aliases(object):
             data = response.json()
 
             try:
-                # Loop over each entry
                 for alias in data['aliases']:
 
                     # If we specified a limit to retrieve, disable the outer loop and 
                     if isinstance(limit, int) and len(aliases) >= limit:
                         raise RetrieveLimit
-
-                    ### print(f'get_aliases()[{idx + data["offset"]}] => {alias}')
 
                     alias_obj = Alias(alias['name'], api=self.api, debug=self.debug)
 
