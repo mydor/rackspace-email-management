@@ -22,7 +22,7 @@ spam:
    ###   - "4.%.%.%"
 
 accounts:
-   account1@domain.com:
+   account1:
       # See domain spam settings above
       spam:
          settings:
