@@ -36,8 +36,20 @@ setup the python venv and install the packages from `requirements.txt`.
 The best way to run the script is to source it.  You can execute it, but
 you then have to activate the python venv yourself after setup.
 
+Source setup.sh
 ```shell
 $ source setup.sh [--prompt <alternate prompt designation>] [--dir <venv directory>]
+(env) $
+```
+
+Execute setup.sh
+```shell
+$ ./setup.sh [--prompt <alternate prompt designation>] [--dir <venv directory>]
+
+You must now run `source "env/bin/activate"`
+
+$ source "env/bin/activate"
+(env) $
 ```
 
 **NOTE** If not specified, the directory will be `env` and the prompt prefix
