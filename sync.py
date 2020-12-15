@@ -4,8 +4,10 @@ from rackspace import Account, Accounts
 from rackspace import Alias, Aliases, Spam
 from rackspace import Api
 
+import argparse
 import json
 import os
+import time
 import yaml
 
 CONFIG_FILE = 'conf.yml'
@@ -119,8 +121,7 @@ def process_domain(domain, data, api):
         process_accounts(accounts, Accounts(api, debug=DEBUG).get())
         process_aliases(aliases, Aliases(api, debug=DEBUG).get())
 
-
-if __name__ == '__main__':
+def sync():
     CONFIG = load_config()
 
     api = Api(**CONFIG)
@@ -131,3 +132,25 @@ if __name__ == '__main__':
             continue
 
         process_domain(domain, domain_cfg, api)
+
+def wait_for_change():
+    while True:
+        if not os.path.exists('changed'):
+            time.sleep(1)
+            continue
+        os.remove('changed')
+        break
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--watch', '-w', default=False, action='store_true')
+    args = parser.parse_args()
+
+    while True:
+        if args.watch:
+            wait_for_change()
+
+        sync()
+
+        if not args.watch:
+            break

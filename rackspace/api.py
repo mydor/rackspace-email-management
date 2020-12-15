@@ -12,7 +12,7 @@ import time
 import yaml
 
 API_URL: str = 'https://api.emailsrvr.com'
-RATE_LIMIT: dict = {}
+RATE_LIMIT_WAIT = 5
 
 # Note: Rackspace returns "403 Forbidden" for rate limit responses,
 # instead of the correct "429 Too Many Requests".
@@ -20,34 +20,29 @@ RATE_LIMIT: dict = {}
 # calls with the rate_limit decorator to pre-throttle the calls
 # and prevent the 403.
 def rate_limit(rate: int =90, _id: str =None):
-    """DECORATOR: Wrap a method to rate limit calls
-
-    Wrap a method in a rate limit to prevent excessive calls
-
-    Args:
-       rate (int, optional): Rate to limit calls to
-       _id (str, optional): ID of this rate limit
-    """
-
     def outer_wrapper(func, _id=_id):
         if _id is None:
             _id = func.__name__
 
         def inner_wrapper(*pargs, **kwargs):
-            interval = 60 / rate
-            now = time.time()
-            diff = now - RATE_LIMIT[_id] if _id in RATE_LIMIT else now
+            while True:
+                response = func(*pargs, **kwargs)
 
-            if _id in RATE_LIMIT and diff < interval:
-                wait = interval - diff
-                time.sleep(wait)
+                # Catch rate limit and repeat request
+                if response.status_code == 403 and response.text:
+                    msg = response.json()
+                    if 'unauthorizedFault' in msg and msg['unauthorizedFault'].get('message', '') == 'Exceeded request limits':
+                        print(f'- ERROR: Rate Limit exceeded, sleeping {RATE_LIMIT_WAIT}, then retry')
+                        time.sleep(RATE_LIMIT_WAIT)
+                        continue
 
-            RATE_LIMIT[_id] = now
+                # Not rate limited, break the loop and return
+                break
 
-            return func(*pargs, **kwargs)
+            return response
         return inner_wrapper
-
     return outer_wrapper
+
 
 class Api(object):
     """Api object with all knowledge for API calls to Rackspace
