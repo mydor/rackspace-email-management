@@ -1,4 +1,4 @@
-#!/bin/env python3
+#!/usr/bin/env python3
 
 from rackspace import Account, Accounts
 from rackspace import Alias, Aliases, Spam
@@ -121,9 +121,7 @@ def process_domain(domain, data, api):
         process_accounts(accounts, Accounts(api, debug=DEBUG).get())
         process_aliases(aliases, Aliases(api, debug=DEBUG).get())
 
-def sync():
-    CONFIG = load_config()
-
+def sync(CONFIG):
     api = Api(**CONFIG)
 
     for domain, domain_cfg in CONFIG['domains'].items():
@@ -133,24 +131,35 @@ def sync():
 
         process_domain(domain, domain_cfg, api)
 
-def wait_for_change():
+def wait_for_change(args, CONFIG):
+    change_file = os.path.join(args.dir, ('changed'))
     while True:
-        if not os.path.exists('changed'):
+        if not os.path.exists(change_file):
             time.sleep(1)
             continue
-        os.remove('changed')
+
+        os.remove(change_file)
         break
+
+    return load_config(args.conf)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--watch', '-w', default=False, action='store_true')
+    parser.add_argument('--dir', '-d', default=CONFIG_DIR)
+    parser.add_argument('--conf', '-c', default=CONFIG_FILE)
     args = parser.parse_args()
+
+    if not os.path.exists(args.conf):
+        args.conf = os.path.join(args.dir, args.conf)
+
+    CONFIG = load_config(args.conf)
 
     while True:
         if args.watch:
-            wait_for_change()
+            CONFIG = wait_for_change(args, CONFIG)
 
-        sync()
+        sync(CONFIG)
 
         if not args.watch:
             break
