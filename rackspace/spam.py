@@ -175,11 +175,13 @@ class Spam(object):
         new = Spam(*pargs, **kwargs)
 
         # Get spam settings from API
-        new.settings = self.settings.get()
+        if self.settings is not None:
+            new.settings = self.settings.get()
 
         # Get ACL settings from API
         for acl in self.acl:
-            new.acl[acl] = self.acl[acl].get()
+            if self.acl[acl] is not None:
+                new.acl[acl] = self.acl[acl].get()
 
         return new
 
@@ -198,8 +200,12 @@ class Spam(object):
         """
         diff = []
 
+        # Short-circuit settings tests if either doesn't have 'settings'
+        if self.getattr('settings', None) is None or othere.getattr('settings', None) is None:
+            pass
+
         # Add settings as a list of changes
-        if self.settings != other.settings:
+        elif self.settings != other.settings:
             diff.append('settings')
 
         # Check each acl for changes
@@ -208,6 +214,9 @@ class Spam(object):
             # be a condition now that we predefine ACL types
             if acl not in other.acl:
                 diff.append((acl, {'addList': None},))
+
+            elif acl not in self:
+                diff.append((acl, {'removeLisst': other.acl[acl].data}))
 
             # If the config acl does not match the rackspace acl
             elif self.acl[acl] != other.acl[acl]:
@@ -233,7 +242,7 @@ class Spam(object):
 
         for diff in diffs:
             # Check if settings have changed and set them
-            if diff == 'settings':
+            if diff == 'settings' and self.settings is not None:
                 self.settings.set()
 
             # Tuple sets should be ACL changes
@@ -242,7 +251,8 @@ class Spam(object):
             #   'removeList': '<comma string of IPs/addresses to remove from from ACL>'})
             elif isinstance(diff, tuple):
                 acl, changes = diff
-                self.acl[acl].update(changes)
+                if self.acl[acl] is not None:
+                    self.acl[acl].update(changes)
 
 class Settings(object):
     """Object to hold state of spam settings"""
