@@ -201,7 +201,7 @@ class Spam(object):
         diff = []
 
         # Short-circuit settings tests if either doesn't have 'settings'
-        if self.getattr('settings', None) is None or othere.getattr('settings', None) is None:
+        if getattr(self, 'settings', None) is None or getattr(other, 'settings', None) is None:
             pass
 
         # Add settings as a list of changes
@@ -215,7 +215,7 @@ class Spam(object):
             if acl not in other.acl:
                 diff.append((acl, {'addList': None},))
 
-            elif acl not in self:
+            elif acl not in self.acl:
                 diff.append((acl, {'removeLisst': other.acl[acl].data}))
 
             # If the config acl does not match the rackspace acl
