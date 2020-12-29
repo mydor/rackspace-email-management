@@ -133,7 +133,7 @@ class Account(object):
             setattr(self, k, v)
 
         if data:
-            self._load(data)
+            self.load(data)
             self.data = data
 
     def __str__(self) -> str:
@@ -153,7 +153,7 @@ class Account(object):
     def __repr__(self) -> str:
         return self.__str__()
 
-    def _load(self, data: dict, _sub=False) -> None:
+    def load(self, data: dict, _sub=False) -> None:
         """Load data into Account object
 
         Loads data into the account object.  This is either from
@@ -184,7 +184,7 @@ class Account(object):
                 continue
 
             elif k == 'contactInfo':
-                self._load(v, _sub=True)
+                self.load(v, _sub=True)
                 continue
 
             elif k == 'emailForwardingAddressList':

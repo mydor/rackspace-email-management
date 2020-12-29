@@ -53,7 +53,7 @@ class Field(object):
         test = self.test
         if test is not None:
             test = f'{test.__name__}()'
-        return f'{self.__class__.__name__}(type={self.type.__name__}, value={self.value!r}, default={self.default!r}, valid={self.valid!r}, test={test})'
+        return f'{self.__class__.__name__}(type={self.type.__name__!r}, value={self.value!r}, default={self.default!r}, valid={self.valid!r}, test={test})'
 
     def __eq__(self, other):
         if self.__class__ != other.__class__:
@@ -121,10 +121,10 @@ class Field(object):
 class Spam(object):
     """Spam container object, holds the Settings and ACL objects"""
     def __repr__(self):
-        return f'{self.__class__.__name__}(settings={self.settings}, acl={self.acl})'
+        return f'{self.__class__.__name__}(settings={self.data}, acl={self.acl})'
 
     def __eq__(self, other):
-        if self.settings != other.settings:
+        if self.data != other.data:
             return False
 
         for acl in set(self.acl) | set(other.acl):
@@ -135,7 +135,7 @@ class Spam(object):
         return True
 
     def __init__(self, *pargs, **kwargs) -> None:
-        self.settings = None
+        self.data = None
         self.acl = {x: None for x in VALID_ACL}
 
         # Pull data out of kwargs, Settings and ACL need subsets
@@ -148,7 +148,7 @@ class Spam(object):
 
         # Grab settings object, if config contains settings data
         if 'settings' in data:
-            self.settings = Settings(data=data['settings'], *pargs, **kwargs)
+            self.data = Settings(data=data['settings'], *pargs, **kwargs)
 
         # Grab acl object(s), if config contains acl settings data
         for acl in VALID_ACL:
@@ -175,8 +175,8 @@ class Spam(object):
         new = Spam(*pargs, **kwargs)
 
         # Get spam settings from API
-        if self.settings is not None:
-            new.settings = self.settings.get()
+        if self.data is not None:
+            new.data = self.data.get()
 
         # Get ACL settings from API
         for acl in self.acl:
@@ -205,7 +205,7 @@ class Spam(object):
             pass
 
         # Add settings as a list of changes
-        elif self.settings != other.settings:
+        elif self.data != other.data:
             diff.append('settings')
 
         # Check each acl for changes
@@ -242,8 +242,8 @@ class Spam(object):
 
         for diff in diffs:
             # Check if settings have changed and set them
-            if diff == 'settings' and self.settings is not None:
-                self.settings.set()
+            if diff == 'settings' and self.data is not None:
+                self.data.set()
 
             # Tuple sets should be ACL changes
             # (<acl name>,
@@ -287,9 +287,14 @@ class Settings(object):
             'removeQuarantineOwner': Field(bool, False),
             }
 
+    def __repr__(self):
+        data = {k: v.get() for k,v in self.data.items()}
+        data = json.dumps(data, sort_keys=True)
+        return f'{self.__class__.__name__}(name={self.name!r}, exchange={self.exchange}, override={self.override}, data={data})'
+        
     def __init__(self,
                  api: Optional[Api] =None, 
-                 name: Optional[str] =None, 
+                 name: [str] =None, 
                  exchange: bool =False, 
                  data: Optional[dict] =None, 
                  debug: bool =DEBUG, 
@@ -321,19 +326,19 @@ class Settings(object):
         if api is not None:
             self.api = api
 
-        self.settings = self._get_fields()
+        self.data = self._get_fields()
 
         if data is not None:
             self.load(data)
 
     def __eq__(self, other):
-        if len(self.settings) != len(other.settings):
+        if len(self.data) != len(other.data):
             return False
 
         if self.__is_exchange() != other.__is_exchange():
             return False
 
-        return self.settings == other.settings
+        return self.data == other.data
 
     def _validate_override(self, override: Optional[bool] =None) -> bool:
         """Validate if override is valid in context
@@ -411,9 +416,9 @@ class Settings(object):
             None
         """
         diff = []
-        for k in set(self.settings) | set(other.settings):
-            if self.settings[k] != other.settings[k]:
-                diff.append((k, self.settings[k].get(), other.settings[k].get()))
+        for k in set(self.data) | set(other.data):
+            if self.data[k] != other.data[k]:
+                diff.append((k, self.data[k].get(), other.data[k].get()))
         return diff
 
     def load(self, data: dict, src: str ='cfg') -> None:
@@ -429,7 +434,7 @@ class Settings(object):
         Raises:
             None
         """
-        settings = self.settings
+        settings = self.data
 
         # yaml 'on' becomes True and 'off' becomes False.  These
         # need to stay 'on' and 'off'
@@ -538,7 +543,10 @@ class Settings(object):
         #              the same dictionary of objects
         return copy.deepcopy(fields)
 
-    def set(self, override: bool =None, *pargs, **kwargs) -> bool:
+    def set(self, *pwargs, **kwargs):
+        return self.set(*pwargs, **kwargs)
+
+    def update(self, override: bool =None, *pargs, **kwargs) -> bool:
         """API: Update any settings changes to the API
 
         Args:
@@ -560,7 +568,7 @@ class Settings(object):
 
         # must send all values, or things my change in unexpected ways
         # DO NOT try and give only changed settings
-        data = dict(self.settings)
+        data = dict(self.data)
 
         # toFolder is mutually exclusive to 'SpamForwardingAddress'
         if data.get('rsEmail.spamHandling', Field(str, '')).get() == 'toFolder':
@@ -587,6 +595,13 @@ class Settings(object):
 
 class ACL(object):
     """ACL object for spam settings"""
+    def __repr__(self):
+        data = json.dumps(sorted(self.data), sort_keys=True)
+        return f'{self.__class__.__name__}(acl={self.acl!r}, name={self.name!r}, exchange={self.exchange}, data={data})'
+
+    def __eq__(self, other):
+        return set(self.data) == set(other.data)
+
     def __init__(self, 
                  acl: str, 
                  api: Optional[Api] =None, 
@@ -630,9 +645,6 @@ class ACL(object):
             else:
                 self.load(data)
 
-    def __eq__(self, other):
-        return set(self.data) == set(other.data)
-
     def load(self, data: list) -> None:
         """Load config data into this ACL
 
@@ -648,7 +660,7 @@ class ACL(object):
         if not isinstance(data, list):
             raise TypeError('ACL must be a list format of addresses or IPs')
 
-        self.data = list(data)
+        self.data = list(set(data))
 
     def _get_account_path(self):
         """Get the account path, if we're in an account context
@@ -730,6 +742,9 @@ class ACL(object):
 
         # return our modified diff
         return diff
+
+    def set(self, *pargs, **kwargs):
+        return self.update(*pargs, **kwargs)
 
     def update(self, data: dict, *pargs, **kwargs) -> bool:
         """API: Update ACL changes with the API

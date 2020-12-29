@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Tuple, Callable
+from colorama import Fore, Style
 
 import base64
 import datetime
@@ -51,6 +52,9 @@ class Api(object):
        customer (int): Rackspace customer #
        domain (str): Rackspace domain
     """
+    def __repr__(self):
+        return f'{self.__class__.__name__}(user_key={self.user_key!r}, secret_key={self.secret_key!r}, customer_id={self.customer!r}, domain={self.domain!r})'
+
     def __init__(self,
             user_key: str,
             secret_key: str,
@@ -90,7 +94,7 @@ class Api(object):
             self.customer = customer_id
 
         if domain is not None:
-            self.set_domain(domain)
+            self.domain = domain
 
         if user_agent is None:
             user_agent = headers.get('User-Agent')
@@ -115,14 +119,20 @@ class Api(object):
 
     @property
     def customer(self) -> str:
-        return self.__customer
+        try:
+            return self.__customer
+        except AttributeError:
+            return None
     @customer.setter
     def customer(self, value: str) -> None:
         self.__customer=value
 
     @property
     def domain(self) -> str:
-        return self.__domain
+        try:
+            return self.__domain
+        except AttributeError:
+            return None
     @domain.setter
     def domain(self, value: str) -> None:
         self.__domain=value
@@ -311,7 +321,19 @@ class Api(object):
         URL = self._url(path)
 
         params, args = self._params(*pargs, **kwargs)
-        print('{} {}'.format(func.__name__.upper(), ''.join((URL,args))))
+        fname = func.__name__.upper()
+        color = ''
+        if fname == 'GET':
+            color = Fore.GREEN
+        elif fname == 'PUT':
+            color = Fore.YELLOW
+        elif fname == 'POST':
+            color = Fore.YELLOW
+        elif fname == 'DELETE':
+            color = Fore.RED
+        fname = f'{color}{fname}{Style.RESET_ALL}'
+
+        print('{} {}'.format(fname, ''.join((URL,args))))
 
         return func(URL, data=data, headers=self._headers(), params=params)
 
