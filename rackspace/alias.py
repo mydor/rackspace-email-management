@@ -27,11 +27,11 @@ class Alias(object):
 
     Attributes:
        name (str): Name of alias, without domain
-       addresses (:list:`str`): List of email targets for alias
+       data (:list:`str`): List of email targets for alias
     """
     def __init__(self, name: str, api: Api =None, debug: bool =DEBUG, *pargs, **kwargs) -> None:
-        self.name: str = name
-        self.addresses: List[str] = []
+        self.name: str = name.split('@')[0]
+        self.data: List[str] = []
         self.loaded: bool = False
         self.debug: bool = debug
 
@@ -41,7 +41,7 @@ class Alias(object):
         self.__load(*pargs, **kwargs)
 
     def __str__(self) -> str:
-        return f'''Alias({{name: "{self.name}", addresses: ["{'", "'.join(self.addresses)}"]}})'''
+        return f'''Alias({{name: "{self.name}", data: ["{'", "'.join(self.data)}"]}})'''
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -86,9 +86,9 @@ class Alias(object):
 
         if address is not None:
             if isinstance(address, list):
-                self.addresses = address
+                self.data = address
             else:
-                self.addresses = [address]
+                self.data = [address]
 
             self.loaded = True
 
@@ -98,13 +98,16 @@ class Alias(object):
             return
 
         if all(key in data for key in ('numberOfMembers', 'singleMemberName')) and data['numberOfMembers'] == 1:
-            self.addresses = [ data['singleMemberName'] ]
+            self.data = [ data['singleMemberName'] ]
 
         elif all(key in data for key in ('emailAddressList',)) and 'emailAddress' in data['emailAddressList']:
-            self.addresses = data['emailAddressList']['emailAddress']
+            self.data = data['emailAddressList']['emailAddress']
+
+        elif isinstance(data, list):
+            self.data = data
 
         else:
-            raise Exception('Should never be here')
+            raise Exception(f'Should never be here {data}')
 
         self.loaded = True
 
@@ -123,8 +126,8 @@ class Alias(object):
         Raises:
            None
         """
-        if address not in self.addresses:
-            self.addresses.append(address)
+        if address not in self.data:
+            self.data.append(address)
 
     def diff(self, other_alias: Alias) -> dict:
         """Compares two Alias objects
@@ -151,8 +154,8 @@ class Alias(object):
         diff: dict = {'add': [], 'del': [], 'changes': 0}
 
         for src, dst, key in ((self, other_alias, 'add'), (other_alias, self, 'del')):
-            for address in src.addresses:
-                if address not in dst.addresses and address not in diff[key]:
+            for address in src.data:
+                if address not in dst.data and address not in diff[key]:
                     diff[key].append(address)
                     diff['changes'] += 1
 
@@ -196,10 +199,10 @@ class Alias(object):
         """
         path = f'{self.api._alias_path(self.name)}'
 
-        data = {'aliasEmails': ','.join(self.addresses)}
+        data = {'aliasEmails': ','.join(self.data)}
 
         if self.debug:
-            print(f"\n{path}\n   ALIAS ADD: {{'{self.name}' => {self.addresses}}}")
+            print(f"\n{path}\n   ALIAS ADD: {{'{self.name}' => {self.data}}}")
             return True
         else:
             response = self.api.post(path, data, *pargs, **kwargs)
@@ -222,10 +225,10 @@ class Alias(object):
         """
         path = f'{self.api._alias_path(self.name)}'
 
-        data = {'aliasEmails': ','.join(self.addresses)}
+        data = {'aliasEmails': ','.join(self.data)}
 
         if self.debug:
-            print(f"\n{path}\n   ALIAS REPLACE: {{'{self.name}' => {self.addresses}}}")
+            print(f"\n{path}\n   ALIAS REPLACE: {{'{self.name}' => {self.data}}}")
             return True
         else:
             response = self.api.put(path, data, *pargs, **kwargs)
