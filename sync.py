@@ -1,18 +1,55 @@
 #!/usr/bin/env python3
 
-from rackspace import Account, Accounts
-from rackspace import Alias, Aliases, Spam
-from rackspace import Api
-
 import argparse
+import copy
+import hashlib
 import json
 import os
 import time
 import yaml
 
+from rackspace import Account, Accounts
+from rackspace import Alias, Aliases, Spam
+from rackspace import Api
+
 CONFIG_FILE = 'conf.yml'
 CONFIG_DIR  = 'conf.d'
+SYNC_DIR    = 'tmp'
 DEBUG = False
+ACCOUNT_FIELDS = ('firstName', 'lastName', 'displayName', 'enabled', 'password')
+
+def load_md5(fname):
+    with open(fname, 'r') as fh:
+        md5 = fh.read()
+
+    return md5
+
+def save_md5(target, md5, debug=False):
+    # Don't overwrite if the data hasn't changed, preserves the timestamp
+    # of the file, showing the last time it was updated
+    try:
+        if load_md5(target) == md5:
+            return
+    except FileNotFoundError:
+        pass
+
+    if not debug:
+        with open(f'{target}.md5', 'w') as fh:
+            fh.write(md5)
+
+def store(src, address, data, data_dir, debug=True):
+    if len(data) < 1:
+        return
+
+    target = os.path.join(data_dir, f'.{address}-{src}')
+
+    json_data = json.dumps(data, sort_keys=True)
+
+    with open(f'{target}.json', 'w') as fh:
+        fh.write(json_data)
+
+    md5 = hashlib.md5(json_data.encode()).hexdigest()
+    save_md5(target, md5)
 
 def load_config(name=None):
     if name is None:
@@ -59,9 +96,20 @@ def _init_accounts(domain, data, api):
 
     return accounts, aliases
 
-def process_accounts(cfg_accounts, rs_accounts):
+def store_account(account):
+    data = {}
+    for field in ACCOUNT_FIELDS:
+        if field in account.data:
+            data[field] = account.data[field]
+
+    store('account', account.name, data, SYNC_DIR)
+
+def process_accounts(cfg_accounts, rs_accounts, domain):
     print('- Accounts(process)')
     for name, account in cfg_accounts.items():
+        # print(account)
+        # Account({name: "michael.smith@moonlightimagery.com", displayName: "Michael Smith", enabled: "True", firstName: "Michael", lastName: "Smith", size: "25600", visibleInExchangeGAL: "True", visibleInRackspaceEmailCompanyDirectory: "True"})
+        # {"firstName": "Michael", "lastName": "Smith"}
 
         if name not in rs_accounts:
             account.add()
@@ -74,11 +122,17 @@ def process_accounts(cfg_accounts, rs_accounts):
         if getattr(account, 'data') and 'spam' in account.data:
             process_spam(account.api, account.data['spam'], name=name)
 
+        store_account(account)
+
     for name, account in rs_accounts.items():
         if name not in cfg_accounts:
             account.remove()
 
-def process_aliases(cfg_aliases, rs_aliases):
+def store_alias(alias, domain):
+    email = '@'.join((alias.name, domain))
+    store('alias', email, alias.data, SYNC_DIR)
+
+def process_aliases(cfg_aliases, rs_aliases, domain):
     print('- Aliases(process)')
     for name, alias in cfg_aliases.items():
 
@@ -90,15 +144,23 @@ def process_aliases(cfg_aliases, rs_aliases):
             if diff['changes']:
                 alias.replace()
 
+        store_alias(alias, domain)
+
     for name, alias in rs_aliases.items():
         if name not in cfg_aliases:
             alias.remove()
 
-def process_spam(api, data, name=None):
-    if name is None:
-        print(f'- Spam {api.domain}')
-    else:
-        print(f'- Spam {name}@{api.domain}')
+def store_spam(_type, account, data):
+    if _type == 'settings':
+        _type = 'spam'
+
+    store(_type, account, data, SYNC_DIR)
+
+def process_spam(api, data: dict, name: str =None):
+    account = f'{"" if name is None else f"{name}"}@{api.domain}'
+
+    print(f'- Spam {account}')
+
     cfg_spam = Spam(api=api, data=data, name=name, debug=DEBUG)
     rs_spam = cfg_spam.get()
 
@@ -106,10 +168,23 @@ def process_spam(api, data, name=None):
         diff = cfg_spam.diff(rs_spam)
         cfg_spam.set(diff)
 
+    types = ('blocklist', 'safelist', 'ipblocklist', 'ipsafelist', 'settings')
+
+    spamdata = copy.deepcopy(data)
+    for stype in types:
+        if stype in spamdata:
+            sdata = spamdata.pop(stype)
+
+            if len(sdata):
+                if isinstance(sdata, list):
+                    sdata.sort()
+
+                store_spam(stype, account, sdata)
+
 def process_domain(domain, data, api):
     api.set_domain(domain)
 
-    print(domain)
+    print(f'DOMAIN: {domain}')
 
     if 'spam' in data:
         process_spam(api, data['spam'])
@@ -118,8 +193,8 @@ def process_domain(domain, data, api):
         print('- Accounts/Aliases(get)')
         accounts, aliases = _init_accounts(domain, data['accounts'], api)
 
-        process_accounts(accounts, Accounts(api, debug=DEBUG).get())
-        process_aliases(aliases, Aliases(api, debug=DEBUG).get())
+        process_accounts(accounts, Accounts(api, debug=DEBUG).get(), domain)
+        process_aliases(aliases, Aliases(api, debug=DEBUG).get(), domain)
 
 def sync(CONFIG):
     api = Api(**CONFIG)
