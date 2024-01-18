@@ -27,21 +27,22 @@ def load_md5(fname):
 def save_md5(target, md5, debug=False):
     # Don't overwrite if the data hasn't changed, preserves the timestamp
     # of the file, showing the last time it was updated
+    md5_file = f'{target}.md5'
+
     try:
-        if load_md5(target) == md5:
+        if load_md5(md5_file) == md5:
             return
     except FileNotFoundError:
         pass
 
-    if not debug:
-        with open(f'{target}.md5', 'w') as fh:
-            fh.write(md5)
+    with open(md5_file, 'w') as fh:
+        fh.write(md5)
 
-def store(src, address, data, data_dir, debug=True):
+def store(src, address, data, data_dir, debug=False):
     if len(data) < 1:
         return
 
-    target = os.path.join(data_dir, f'.{address}-{src}')
+    target = os.path.join(data_dir, f'{"." if debug else ""}{address}-{src}')
 
     json_data = json.dumps(data, sort_keys=True)
 
@@ -102,7 +103,7 @@ def store_account(account):
         if field in account.data:
             data[field] = account.data[field]
 
-    store('account', account.name, data, SYNC_DIR)
+    store('account', account.name, data, SYNC_DIR, debug=DEBUG)
 
 def process_accounts(cfg_accounts, rs_accounts, domain):
     print('- Accounts(process)')
@@ -130,7 +131,7 @@ def process_accounts(cfg_accounts, rs_accounts, domain):
 
 def store_alias(alias, domain):
     email = '@'.join((alias.name, domain))
-    store('alias', email, alias.data, SYNC_DIR)
+    store('alias', email, alias.data, SYNC_DIR, debug=DEBUG)
 
 def process_aliases(cfg_aliases, rs_aliases, domain):
     print('- Aliases(process)')
@@ -154,7 +155,7 @@ def store_spam(_type, account, data):
     if _type == 'settings':
         _type = 'spam'
 
-    store(_type, account, data, SYNC_DIR)
+    store(_type, account, data, SYNC_DIR, debug=DEBUG)
 
 def process_spam(api, data: dict, name: str =None):
     account = f'{"" if name is None else f"{name}"}@{api.domain}'
