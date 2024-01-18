@@ -2,6 +2,9 @@
 conf.yml
 conf.d/*.yml
 
+# Backup files/dirs
+*.bak
+
 # Vim swap files
 .*.sw[a-z]
 
@@ -114,8 +117,6 @@ celerybeat.pid
 env/
 venv/
 ENV/
-env.bak/
-venv.bak/
 
 # Spyder project settings
 .spyderproject

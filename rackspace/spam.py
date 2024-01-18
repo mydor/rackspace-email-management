@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import copy
+import json
+
 from dataclasses import dataclass, field
 from typing import Any, Optional, List
 
 from .api import Api
-
-import json
-import copy
 
 # NOTE: Spam settings are stored in 5 separate endpoints each, for
 # both domains AND accounts.  These consist of the 'settings',
@@ -187,14 +187,14 @@ class Spam(object):
 
     def diff(self, other: Spam) -> list:
         """Return difference information between two Spam objects
-        
+
         Args:
             other (Spam): Other Spam() object to compare against
 
         Returns:
             list: List of tuples with what setting group changed,
                   and optionally what the change data is
-        
+
         Raises:
             None
         """
@@ -291,13 +291,13 @@ class Settings(object):
         data = {k: v.get() for k,v in self.data.items()}
         data = json.dumps(data, sort_keys=True)
         return f'{self.__class__.__name__}(name={self.name!r}, exchange={self.exchange}, override={self.override}, data={data})'
-        
+
     def __init__(self,
-                 api: Optional[Api] =None, 
-                 name: [str] =None, 
-                 exchange: bool =False, 
-                 data: Optional[dict] =None, 
-                 debug: bool =DEBUG, 
+                 api: Optional[Api] =None,
+                 name: [str] =None,
+                 exchange: bool =False,
+                 data: Optional[dict] =None,
+                 debug: bool =DEBUG,
                  override: bool =False) -> None:
         """Create object for settings
 
@@ -602,13 +602,13 @@ class ACL(object):
     def __eq__(self, other):
         return set(self.data) == set(other.data)
 
-    def __init__(self, 
-                 acl: str, 
-                 api: Optional[Api] =None, 
-                 name: Optional[str] =None, 
-                 exchange: bool=False, 
-                 data: Any[dict, list] =None, 
-                 debug: bool =DEBUG, 
+    def __init__(self,
+                 acl: str,
+                 api: Optional[Api] =None,
+                 name: Optional[str] =None,
+                 exchange: bool=False,
+                 data: Any[dict, list] =None,
+                 debug: bool =DEBUG,
                  *pargs, **kwargs) -> None:
         """Create an ACL object for spam ACLs
 
@@ -720,7 +720,7 @@ class ACL(object):
         """
         if self == other:
             return None
-        
+
         # Build basic structure, using sets to dedupe addresses/IPs
         diff = {'addList': set(), 'removeList': set()}
 
@@ -810,7 +810,7 @@ class ACL(object):
 ### GET /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/settings
 ### PUT /customers/12345678/domains/example.com/rs/mailboxes/alex.smith/spam/settings
 ### {
-###       'filterLevel' => 'on',  
+###       'filterLevel' => 'on',
 ###       'rsEmail.spamHandling' => 'toFolder',
 ###       'rsEmail.hasFolderCleaner' => 'true',
 ###       'rsEmail.spamFolderAgeLimit' => '7',

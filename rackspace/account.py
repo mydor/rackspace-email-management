@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Any, Optional
 
 from .api import Api
@@ -68,6 +69,7 @@ class Account(object):
             'homeCountry': str,
             'homeFaxNumber': str,
             'homeNumber': str,
+            'homePostalAddress': str,
             'homePostalCode': str,
             'homeState': str,
             'homeStreet': str,
@@ -78,9 +80,11 @@ class Account(object):
             'name': str,
             'notes': str,
             'organizationalStatus': str,
+            'organization': str,
             'organizationUnit': str,
             'pagerNumber': str,
             'password': str,
+            'personalTitle': str,
             'recoverDeleted': bool,
             'saveForwardedEmail': bool,
             'size': int,
@@ -89,6 +93,7 @@ class Account(object):
             'vacationMessage': str,
             'visibleInExchangeGAL': bool,
             'visibleInRackspaceEmailCompanyDirectory': bool,
+
             }
 
     __READONLY = [
@@ -103,7 +108,12 @@ class Account(object):
             'size',
             ]
 
-    def __init__(self, name: str, data: dict =None, api: Api =None, debug: bool =DEBUG) -> None:
+    def __init__(self,
+                 name: str,
+                 data: dict =None,
+                 api: Api =None,
+                 response: Api.requests.Response =None,
+                 debug: bool =DEBUG) -> None:
         """Create an Account object
 
         Instantiate an object of Account
@@ -111,6 +121,7 @@ class Account(object):
         Args:
            name (str): Name of the account (without domain)
            api (Api, optional): Api object to communicate with rackspace
+           response (Api.requests.Response, optional): requests Response object
            data (dict, optional): Data to load into Account object
 
         Returns:
@@ -119,9 +130,10 @@ class Account(object):
         Raises:
            None
         """
-        self.name = name
-        self.loaded = False
-        self.debug = debug
+        self.name: str = name
+        self.loaded: bool = False
+        self.debug: bool = debug
+        self.response: Api.requests.Response = response
 
         # Store a copy of the data set, will be useful for the spam module
         self.data = None
@@ -152,6 +164,18 @@ class Account(object):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    @property
+    def success(self):
+        return self.api._success(self.response, output=False)
+
+    @property
+    def canRecover(self):
+        try:
+            data = self.response.json()
+            return data is not None and data.get('itemNotFoundFault',{}).get('additionalData', {}).get('isRecoverable', False)
+        except:
+            return False
 
     def load(self, data: dict, _sub=False) -> None:
         """Load data into Account object
@@ -263,7 +287,6 @@ class Account(object):
             v1 = getattr(self, field, default)
             v2 = getattr(other_account, field, default)
             if v1 != v2:
-                ### print(f"DIFF: {field}; '{v1}' != '{v2}'")
                 diff.update({field: v1})
 
         return diff
@@ -287,11 +310,11 @@ class Account(object):
         response = self.api.get(path, *pargs, **kwargs)
 
         if not self.api._success(response):
-            return None
+            return Account(self.name, api=self.api, data=self.data, response=response)
 
-        return Account(self.name, api=self.api, data=response.json())
+        return Account(self.name, api=self.api, data=response.json(), response=response)
 
-    def add(self, data: dict =None, *pargs: list, **kwargs: dict) -> bool:
+    def add(self, data: dict =None, recover: bool =False, *pargs: list, **kwargs: dict) -> bool:
         """API: Add a new rackspace account
 
         Adds the account to rackspace
@@ -317,7 +340,7 @@ class Account(object):
             for field, data_type in fields.items():
                 if field in readonly:
                     continue
-                
+
                 default: Any = None
                 if data_type is str:
                     default = ''
@@ -327,6 +350,9 @@ class Account(object):
                     default = False
 
                 data[field] = getattr(self, field, default)
+
+        if recover:
+            data['recoverDeleted'] = True
 
         FAILED = False
         for req in required:
@@ -340,6 +366,8 @@ class Account(object):
             print(f"\n{path}\n   ACCOUNT ADD: '{self.name}'")
             return True
         else:
+            import json
+            print(json.dumps(data, indent=4, sort_keys=True))
             response = self.api.post(path, data, *pargs, **kwargs)
             return self.api._success(response)
 
@@ -362,6 +390,9 @@ class Account(object):
             print(f"\n{path}\n   ACCOUNT REMOVE: '{self.name}'")
             return True
         else:
+            if not input(f"Are you sure you wish to delete {path} (Yes/No)? ").lower() in ('y', 'yes'):
+                return True
+
             response = self.api.delete(path, *pargs, **kwargs)
             return self.api._success(response)
 

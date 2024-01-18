@@ -1,6 +1,4 @@
 from __future__ import annotations
-from typing import Optional, Tuple, Callable
-from colorama import Fore, Style
 
 import base64
 import datetime
@@ -11,6 +9,10 @@ import logging
 import requests
 import time
 import yaml
+
+from typing import Optional, Tuple, Callable
+
+from colorama import Fore, Style
 
 API_URL: str = 'https://api.emailsrvr.com'
 RATE_LIMIT_WAIT = 5
@@ -84,7 +86,7 @@ class Api(object):
 
         Raises:
            None
-    
+
         Example:
            api = Api('eGbq9/2hcZsRlr1JV1Pi', 'QHOvchm/40czXhJ1OxfxK7jDHr3t', time_stamp=20010317143725, user_agent='Rackspace Management Interface')
         """
@@ -142,7 +144,7 @@ class Api(object):
 
         Args:
            domain (str): Domain to make requests for
-        
+
         Returns:
            None
 
@@ -181,7 +183,7 @@ class Api(object):
         self.headers.update({'X-Api-Signature': token})
 
         return token
-    
+
     def _genTokenSha(self) -> str:
         """Generate the Auth Token SHA hash
 
@@ -214,7 +216,7 @@ class Api(object):
         Returns:
            dict: shallow copy of `**kwargs`
            str: URL args string (for debug output)
-        
+
         Raises:
            None
         """
@@ -355,7 +357,11 @@ class Api(object):
         Raises:
            None
         """
-        return self.__send(requests.delete, *pargs, **kwargs)
+        while input(f"\n{pargs[0]}\nAre you sure you wish to delete (Yes/No)? ").lower() in ('y', 'yes'):
+          return self.__send(requests.delete, *pargs, **kwargs)
+          break
+        else:
+          return None
 
     def _url(self, path: str) -> str:
         """Construct the full URL for an API call
@@ -378,7 +384,7 @@ class Api(object):
 
         Args:
            ver (int, optional): API Version, defaults to 1
-        
+
         Returns:
            str: Customer API path
 
@@ -514,13 +520,13 @@ class Api(object):
 
         def httpclient_log(*pargs):
             httpclient_logger.log(level, ' '.join(pargs))
-    
+
         http.client.print = httpclient_log # type: ignore
-    
+
         http.client.HTTPConnection.debuglevel = 1 # type: ignore
 
     @staticmethod
-    def _success(response: requests.Response, status_code: int =200) -> bool:
+    def _success(response: requests.Response, status_code: int =200, output: bool =True) -> bool:
         """Check response for "success"
 
         Checks the response object for "success", normally status_code 200
@@ -536,8 +542,11 @@ class Api(object):
         Raises:
            None
         """
-        if response.status_code != status_code:
-            if response.text:
-                print(json.dumps(response.json(), sort_keys=True, indent=4))
+        try:
+            if response.status_code != status_code:
+                if response.text and output:
+                    print(json.dumps(response.json(), sort_keys=True, indent=4))
+                return False
+            return True
+        except AttributeError:
             return False
-        return True

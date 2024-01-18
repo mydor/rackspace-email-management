@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 
-from rackspace import spam, Api, Account, Alias
-
+import argparse
 import hashlib
 import json
 import os
 import yaml
 
-KEYS = ['account', 'alias', 'spam', 'blacklist', 'ipblacklist', 'safelist', 'ipsafelist']
+from rackspace import spam, Api, Account, Alias
+
+KEYS = ['account', 'alias', 'spam', 'blocklist', 'ipblocklist', 'safelist', 'ipsafelist']
 REMOVE = ('account', 'alias')
+
+SYNC_DIR = 'tmp'
+CONFIG_FILE = 'conf.yml'
 
 api = None
 
@@ -32,10 +36,10 @@ def split(fname):
         obj = Alias(api=api, name=name)
     elif _type == 'spam':
         obj = spam.Settings(api=api, name=name)
-    elif _type == 'blacklist':
-        obj = spam.ACL(api=api, acl='blacklist', name=name)
-    elif _type == 'ipblacklist':
-        obj = spam.ACL(api=api, acl='ipblacklist', name=name)
+    elif _type == 'blocklist':
+        obj = spam.ACL(api=api, acl='blocklist', name=name)
+    elif _type == 'ipblocklist':
+        obj = spam.ACL(api=api, acl='ipblocklist', name=name)
     elif _type == 'safelist':
         obj = spam.ACL(api=api, acl='safelist', name=name)
     elif _type == 'ipsafelist':
@@ -51,60 +55,60 @@ def save_md5(fname, md5, debug=True):
 def sync(fname, data):
     print(f'SYNC: {fname}')
 
-    addr, obj = split(fname)
+    addr, local_object = split(fname)
 
-    obj.load(data=data['json'])
-    rs = obj.get()
+    local_object.load(data=data['json'])
+    online_object = local_object.get()
 
-    if rs is None:
+    if online_object is None or ( hasattr(online_object, 'success') and not online_object.success ):
         print('NEW')
         # new
-        if getattr(obj, 'add', None) is not None:  # Account, Alias
+        if getattr(local_object, 'add', None) is not None:  # Account, Alias
             print('obj.add()')
-            obj.add()
+            local_object.add(recover=online_object.canRecover)
             return save_md5(fname, data['md5'], debug=False)
 
-        elif getattr(obj, 'set', None) is not None: # spam.Settings, spam.ACL
+        elif getattr(local_object, 'set', None) is not None: # spam.Settings, spam.ACL
             print('obj.set()')
-            obj.set()
+            local_object.set()
             return save_md5(fname, data['md5'], debug=False)
 
-        return 
+        return
 
-    diff = obj.diff(rs)
-    if diff is None:
-        return save_md5(fname, data['md5'], debug=False)
+    else:
+        diff = local_object.diff(online_object)
+        if diff is None:
+            return save_md5(fname, data['md5'], debug=False)
 
-    elif 'changes' in diff:
-        if diff['changes'] > 0:
-            print(f'1: obj.update({diff})')
-            obj.update(diff)
+        elif 'changes' in diff:
+            if diff['changes'] > 0:
+                print(f'1: obj.update({diff})')
+                local_object.update(diff)
+                return save_md5(fname, data['md5'], debug=False)
+
+            else:
+                return save_md5(fname, data['md5'], debug=False)
+
+        elif len(diff) > 0:
+            print(f'2: obj.update({diff})')
+            local_object.update(diff)
             return save_md5(fname, data['md5'], debug=False)
 
         else:
             return save_md5(fname, data['md5'], debug=False)
-            pass
-
-    elif len(diff) > 0:
-        print(f'2: obj.update({diff})')
-        obj.update(diff)
-        return save_md5(fname, data['md5'], debug=False)
-
-    else:
-        return save_md5(fname, data['md5'], debug=False)
 
 def remove(fname):
     print(f'REMOVE: {fname}')
 
     addr, obj = split(fname)
 
-    rs = obj.get()
-    if getattr(rs, 'remove', None) is not None:
-        rs.remove()
+    return_state = obj.get()
+    if getattr(return_state, 'remove', None) is not None:
+        return_state.remove()
         os.unlink(f'{fname}.md5')
 
-def cfg():
-    with open('conf.yml') as fh:
+def cfg(cfg_name):
+    with open(cfg_name) as fh:
         raw = fh.read()
 
     data = yaml.safe_load(raw)
@@ -113,15 +117,27 @@ def cfg():
     api = Api(user_key=data['user_key'], secret_key=data['secret_key'], customer_id=data['customer_id'])
     #print(api)
 
+
 if __name__ == '__main__':
-    cfg()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data', '-d', default=SYNC_DIR)
+    parser.add_argument('--conf', '-c', default=CONFIG_FILE)
+    args = parser.parse_args()
+
+    cfg(args.conf)
 
     settings = {k: {} for k in KEYS}
     cksum = {k: {} for k in KEYS}
 
     # build data
-    for path, dirs, files in os.walk('tmp'):
+    for path, dirs, files in os.walk(args.data):
+        if os.path.dirname(path) == args.data:
+            continue
+
         for fname in files:
+            if fname.startswith('.'):
+                continue
+
             filepath = os.path.join(path, fname)
             basename, ext = os.path.splitext(filepath)
             _type = basename.split('-')[-1]

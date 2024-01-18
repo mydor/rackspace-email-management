@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+import json
+
 from typing import List, Optional
 
 from .api import Api
@@ -9,7 +12,7 @@ PAGE_SIZE: int = 50
 #
 # NOTE: The list of email aliases varies by row, depending on if
 # the alias has a single destination, or multiple.
-# A single destination results in the row having all the information needed 
+# A single destination results in the row having all the information needed
 # to construct an Alias() object.
 # Multiple destinations requires another GET, for that alias, to retrieve
 # the destination addresses needed to construct an Alias() object
@@ -29,11 +32,17 @@ class Alias(object):
        name (str): Name of alias, without domain
        data (:list:`str`): List of email targets for alias
     """
-    def __init__(self, name: str, api: Api =None, debug: bool =DEBUG, *pargs, **kwargs) -> None:
+    def __init__(self,
+                 name: str,
+                 api: Api =None,
+                 debug: bool =DEBUG,
+                 response: Api.requests.Response =None,
+                 *pargs, **kwargs) -> None:
         self.name: str = name.split('@')[0]
         self.data: List[str] = []
         self.loaded: bool = False
         self.debug: bool = debug
+        self.response: Api.requests.Response = response
 
         if api is not None:
             self.api = api
@@ -45,6 +54,21 @@ class Alias(object):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    @property
+    def success(self):
+        try:
+            return self.api._success(self.response, output=False)
+        except:
+            return False
+
+    @property
+    def canRecover(self):
+        return False
+
+
+    def save(self):
+        print(json.dumps(self.data))
 
     def load(self, data: dict =None) -> None:
         """Load data into Alias object
@@ -151,7 +175,7 @@ class Alias(object):
         # Since the only content of an alias is a list of target addresses
         # we need to return what is new, to add
         # and what is old, to remove
-        diff: dict = {'add': [], 'del': [], 'changes': 0}
+        diff: dict = {'add': [], 'del': [], 'old': other_alias.data, 'new': self.data, 'changes': 0}
 
         for src, dst, key in ((self, other_alias, 'add'), (other_alias, self, 'del')):
             for address in src.data:
@@ -180,9 +204,9 @@ class Alias(object):
         response = self.api.get(path, *pargs, **kwargs)
 
         if not self.api._success(response):
-            return None
+            return Alias(self.name, api=self.api, data=self.data, response=response)
 
-        return Alias(self.name, api=self.api, data=response.json())
+        return Alias(self.name, api=self.api, data=response.json(), response=response)
 
     def add(self, *pargs: list, **kwargs: dict) -> bool:
         """API: Add rackspace alias with addresses
@@ -257,7 +281,7 @@ class Alias(object):
             response = self.api.delete(path, *pargs, **kwargs)
             return self.api._success(response)
 
-    def update(self, address: str, add: bool =False, remove: bool = False, *pargs: list, **kwargs: dict) -> bool:
+    def update(self, data: dict, *pargs: list, **kwargs: dict) -> bool:
         """API: Update the rackspace alias
 
         Updates the rackspace alias by adding, or removing, a single address.
@@ -277,24 +301,35 @@ class Alias(object):
            None
         """
 
-        path = f'{self.api._alias_path(self.name)}/{address}'
+        path = f'{self.api._alias_path(self.name)}'
 
-        if add:
+        api_data = {}
+        if data['changes'] > 1:
+            func = self.api.put
+            debug_data = f"set: {' , '.join(data['new'])}"
+            api_data = { f"aliasEmails={','.join(data['new'])}" }
+            api_data = { 'aliasEmails': ','.join(data['new']) }
+
+        elif data.get('add'):
             func = self.api.post
-            xxx = f'add: {address}'
+            debug_data = f"add: {data['add'][0]}"
+            path = f"{path}/{data['add'][0]}"
 
-        elif remove:
+        elif data.get('del'):
             func = self.api.delete
-            xxx = 'remove: {address}'
-        
+            debug_data = f"remove: {data['del'][0]}"
+            path = f"{path}/{data['del'][0]}"
+
         else:
+            print(f"ERROR: {path}")
             raise Exception('Should not be here')
 
         if self.debug:
-            print(f"\n{path}\n   ALIAS UPDATE: {self.name} => {xxx}")
+            print(f"\n{path}\n   ALIAS UPDATE: {self.name} => {debug_data}")
             return True
+
         else:
-            response = func(path, data={}, *pargs, **kwargs)
+            response = func(path, data=api_data, *pargs, **kwargs)
             return self.api._success(response)
 
 
@@ -334,7 +369,7 @@ class Aliases(object):
             try:
                 for alias in data['aliases']:
 
-                    # If we specified a limit to retrieve, disable the outer loop and 
+                    # If we specified a limit to retrieve, disable the outer loop and
                     if isinstance(limit, int) and len(aliases) >= limit:
                         raise RetrieveLimit
 
