@@ -10,12 +10,13 @@ REQ=""
 sourced=""
 VENV_DIR=""
 VENV_PROMPT=""
+PYTHON_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 
 clear_var () {
   unset DEFAULT_DIR DEFAULT_PROMPT
   unset VENV_DIR    VENV_PROMPT
   unset ARGS CACHE PROG REQ sourced
-  unset -f isexit sourced clear_var help
+  unset -f isexit sourced clear_var help setup_req
 }
 
 isexit () {
@@ -27,6 +28,26 @@ isexit () {
 
 sourced () {
   [ -n "$sourced" ] && return 0 || return 1
+}
+
+setup_req () {
+    reqver_file="requirements.txt-${PYTHON_VER}"
+    reqdist_file="requirements.txt.dist"
+    req_file="requirements.txt"
+
+    if [ ! -f "${reqver_file}" ]; then
+        cp -v "${reqdist_file}" "${reqver_file}"
+    fi
+
+    target=$(basename $(readlink -f "${req_file}"))
+
+    if \
+       [ ! -f "${req_file}" ] ||           # No requirements file
+       [ "${target}" == "${req_file}" ] || # Requirements file no symlink
+       [ "${target}" != "${reqver_file}" ] # Requirements file pointing to another python version
+    then
+	ln -sf "${reqver_file}" "${req_file}"
+    fi
 }
 
 help () {
@@ -97,6 +118,9 @@ if [ ! -d "${VENV_DIR}" ]; then
   # Update pip to latest
   pip install --upgrade pip
 
+  # Setup the requrements file
+  setup_req
+
   # Install required packages
   pip install -r requirements.txt
 
@@ -111,6 +135,9 @@ fi
 
 if [ -n "$REQ" ]; then
   . "${VENV_DIR}"/bin/activate
+
+  # Setup the requrements file
+  setup_req
 
   pip install -r requirements.txt | fgrep -v -e 'Requirement already satisfied'
 
