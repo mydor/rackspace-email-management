@@ -1,12 +1,17 @@
+"""Handle RackSpace spam settings"""
 from __future__ import annotations
 
 import copy
 import json
 
-from dataclasses import dataclass, field
-from typing import Any, Optional, List
+from dataclasses import dataclass
+from typing import Any, Optional, List, TypeVar, Union, Callable
 
 from .api import Api
+
+SelfSpam = TypeVar('SelfSpam', bound='Spam')
+SelfSettings = TypeVar('SelfSettings', bound='Settings')
+SelfACL = TypeVar('SelfACL', bound='ACL') # pylint: disable=invalid-name
 
 # NOTE: Spam settings are stored in 5 separate endpoints each, for
 # both domains AND accounts.  These consist of the 'settings',
@@ -27,9 +32,6 @@ def _positive(x: int) -> None:
     Args:
         x (int): Value to test
 
-    Returns:
-        None
-
     Raises:
         ValueError: on negative values
     """
@@ -37,57 +39,130 @@ def _positive(x: int) -> None:
         raise ValueError(f'Value {x!r} is a negative number!')
 
 @dataclass
-class Field(object):
+class Field():
     """Field value class
 
     Field() class helps constrain a value to a specific type,
     handles default value, value constraints and testing
     """
-    type: Any = None
-    default: Any = None
-    valid: Any = None
-    test: Any = None
-    value: Any = None
+    __type: Union[str, int, bool]
+    __default: Union[str, int, bool, None] = None
+    __valid: tuple[Union[str, int, bool]] = None
+    __test: Callable = None
+    __value: Union[str, int, bool, None] = None
 
-    def __repr__(self):
-        test = self.test
+    def __str__(self) -> str:
+        return str(self.__value)
+
+    def __repr__(self) -> str:
+        test = self.__test
         if test is not None:
             test = f'{test.__name__}()'
-        return f'{self.__class__.__name__}(type={self.type.__name__!r}, value={self.value!r}, default={self.default!r}, valid={self.valid!r}, test={test})'
+        return (f'{self.__class__.__name__}(' +
+            ', '.join((
+                f'type={self.__type.__name__!r}',
+                f'value={self.value!r}',
+                f'default={self.__default!r}',
+                f'valid={self.__valid!r}',
+                f'test={test})'
+            )))
 
-    def __eq__(self, other):
+    def __eq__(
+            self,
+            other) -> bool:
         if self.__class__ != other.__class__:
             return False
 
-        elif self.type != other.type:
+        if self.type != other.type:
             return False
 
-        return self.get() == other.get()
+        return self.value == other.value
 
-    def default(self) -> Any:
+    @property
+    def type(self) -> Union[str, int, bool]:
+        """
+        Get <Field> type constraint
+
+        Returns:
+            Union[str, int, bool]: expected object value's type
+        """
+        return self.__type
+
+    @property
+    def default(self) -> Optional[Union[str, int, bool]]:
         """Returns the default value of Field
-
-        Args:
-            None
 
         Returns:
             Any: None or defined default value
         """
-        return self.default
+        print("<Field>.default should only be used for debugging!!!")
+        return self.__default
+
+    @property
+    def value(self) -> Optional[Union[str, int, bool]]:
+        """
+        Get <Field>'s value, or if not set, the default
+
+        Returns:
+            Optional[Union[str, int, bool]]: <Field> value or default
+        """
+        if self.__value is None:
+            return self.__default
+
+        return self.__value
+
+    @value.setter
+    def value(self, value) -> None:
+        if value is None:
+            self.__value = None
+            return
+
+        if not isinstance(value, self.__type):
+            raise TypeError(f'value {value!r} MUST be of type {self.__type.__name__!r}')
+
+        if isinstance(self.__valid, tuple) and value not in self.__valid:
+            raise ValueError(f'value {value!r} MUST be one of {self.__valid!r}')
+
+        if self.__test is not None:
+            self.__test(value)
+
+        self.__value = value
+
+    @property
+    def valid(self) -> Any:
+        """
+        Get <Field> valid possible settings
+
+        Returns:
+            Any: tuple of valid valued
+        """
+        print("<Field>.valid should only be used for debugging!!!")
+        return self.__valid
+
+    @property
+    def test(self) -> Callable:
+        """
+        Get <Field>'s value validation function
+
+        Returns:
+            Callable: Value validation function
+        """
+        print("<Field>.test should only be used for debugging!!!")
+        return self.__test
 
     def get(self) -> Any:
         """Returns the stored value, or default if no value stored
 
-        Args:
-            None
-
         Returns:
             Any: Stored value, or default value
         """
-        if self.value is None:
-            return self.default
-
+        print("Something calling `.get()`, should use `.value`")
         return self.value
+        # if self.value is None:
+        #     return self.__default
+
+        # return self.value
+
 
     def set(self, value) -> None:
         """Stores a value
@@ -95,35 +170,36 @@ class Field(object):
         Args:
             value: Value to store
 
-        Returns:
-            None
-
         Raises:
             TypeError: `value` is not of required type
             ValueError: `value` is not one of the specified `valid` values
             ValueError: `value` failed the test function
         """
-        if value is None:
-            self.value = None
-            return
-
-        if not isinstance(value, self.type):
-            raise TypeError(f'value {value!r} MUST be of type {self.type.__name__!r}')
-
-        if isinstance(self.valid, tuple) and value not in self.valid:
-            raise ValueError(f'value {value!r} MUST be one of {self.valid!r}')
-
-        if self.test is not None:
-            self.test(value)
-
+        print("Something calling `.set(<value>)`, should use `.value = <value>`")
         self.value = value
+        # if value is None:
+        #     self.__value = None
+        #     return
 
-class Spam(object):
+        # if not isinstance(value, self.__type):
+        #     raise TypeError(f'value {value!r} MUST be of type {self.__type.__name__!r}')
+
+        # if isinstance(self.__valid, tuple) and value not in self.__valid:
+        #     raise ValueError(f'value {value!r} MUST be one of {self.__valid!r}')
+
+        # if self.__test is not None:
+        #     self.__test(value)
+
+        # self.__value = value
+
+class Spam():
     """Spam container object, holds the Settings and ACL objects"""
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'{self.__class__.__name__}(settings={self.data}, acl={self.acl})'
 
-    def __eq__(self, other):
+    def __eq__(
+            self,
+            other) -> bool:
         if self.data != other.data:
             return False
 
@@ -134,7 +210,10 @@ class Spam(object):
                 return False
         return True
 
-    def __init__(self, *pargs, **kwargs) -> None:
+    def __init__(
+            self,
+            *pargs,
+            **kwargs) -> SelfSpam:
         self.data = None
         self.acl = {x: None for x in VALID_ACL}
 
@@ -160,14 +239,8 @@ class Spam(object):
     def get(self) -> Spam:
         """API: Get all spam settings from rackspace API
 
-        Args:
-            None
-
         Returns:
             Spam: New Spam() object with rackspace settings
-
-        Raises:
-            None
         """
         pargs = self.pargs
         kwargs = self.kwargs
@@ -185,7 +258,9 @@ class Spam(object):
 
         return new
 
-    def diff(self, other: Spam) -> list:
+    def diff(
+            self,
+            other: Spam) -> list:
         """Return difference information between two Spam objects
 
         Args:
@@ -194,9 +269,6 @@ class Spam(object):
         Returns:
             list: List of tuples with what setting group changed,
                   and optionally what the change data is
-
-        Raises:
-            None
         """
         diff = []
 
@@ -225,17 +297,13 @@ class Spam(object):
 
         return diff
 
-    def set(self, diffs: Optional[list] =None) -> None:
+    def set(
+            self,
+            diffs: Optional[list] =None) -> None:
         """API: Sets the setting/acl changes via the API
 
         Args:
             diffs (list): summary of changes to be published
-
-        Returns:
-            None
-
-        Raises:
-            None
         """
         if diffs is None or not diffs:
             return
@@ -254,17 +322,29 @@ class Spam(object):
                 if self.acl[acl] is not None:
                     self.acl[acl].update(changes)
 
-class Settings(object):
+class Settings():
     """Object to hold state of spam settings"""
     __DOMAIN_FIELDS = {
-            'filterLevel': Field(str, 'on', ('on', 'off', 'exclusive')),
+            'filterLevel': Field(str,
+                                 'on',
+                                 ('on', 'off', 'exclusive')),
             'overrideUserSettings': Field(bool, False),
-            'rsEmail.spamHandling': Field(str, 'toFolder', ('toFolder', 'delete', 'labelSubject', 'toAddress')),
+            'rsEmail.spamHandling': Field(str,
+                                          'toFolder',
+                                          ('toFolder', 'delete', 'labelSubject', 'toAddress')),
             'rsEmail.hasFolderCleaner': Field(bool, True),
-            'rsEmail.spamFolderAgeLimit': Field(int, 7, None, _positive),
-            'rsEmail.spamFolderNumLimit': Field(int, 250, None, _positive),
+            'rsEmail.spamFolderAgeLimit': Field(int,
+                                                7,
+                                                None,
+                                                _positive),
+            'rsEmail.spamFolderNumLimit': Field(int,
+                                                250,
+                                                None,
+                                                _positive),
             'rsEmail.spamForwardingAddress': Field(str, ''),
-            'exchange.forwardToDomainQuarantine': Field(str, 'off', ('on', 'off', 'nonuser')),
+            'exchange.forwardToDomainQuarantine': Field(str,
+                                                        'off',
+                                                        ('on', 'off', 'nonuser')),
             'exchange.quarantineOwner': Field(str, ''),
             'exchange.removeQuarantineOwner': Field(bool, False),
             'exchange.defaultQuarantineOwner': Field(str, ''),
@@ -272,33 +352,52 @@ class Settings(object):
             }
 
     __ACCOUNT_RS_FIELDS = {
-            'filterLevel': Field(str, 'on', ('on', 'off', 'exclusive')),
-            'rsEmail.spamHandling': Field(str, 'toFolder', ('toFolder', 'delete', 'labelSubject', 'toAddress')),
+            'filterLevel': Field(str,
+                                 'on',
+                                 ('on', 'off', 'exclusive')),
+            'rsEmail.spamHandling': Field(str,
+                                          'toFolder',
+                                          ('toFolder', 'delete', 'labelSubject', 'toAddress')),
             'rsEmail.hasFolderCleaner': Field(bool, True),
-            'rsEmail.spamFolderAgeLimit': Field(int, 7, None, _positive),
-            'rsEmail.spamFolderNumLimit': Field(int, 250, None, _positive),
+            'rsEmail.spamFolderAgeLimit': Field(int,
+                                                7,
+                                                None,
+                                                _positive),
+            'rsEmail.spamFolderNumLimit': Field(int,
+                                                250,
+                                                None,
+                                                _positive),
             'rsEmail.spamForwardingAddress': Field(str, ''),
             }
 
     __ACCOUNT_EX_FIELDS = {
-            'filterLevel': Field(str, 'on', ('on', 'off', 'exclusive')),
+            'filterLevel': Field(str,
+                                 'on',
+                                 ('on', 'off', 'exclusive')),
             'sendtodomainquarantine': Field(bool, False),
             'quarantineowner': Field(str, ''),
             'removeQuarantineOwner': Field(bool, False),
             }
 
-    def __repr__(self):
-        data = {k: v.get() for k,v in self.data.items()}
+    def __repr__(self) -> str:
+        data = {key: val.value for key,val in self.data.items()}
         data = json.dumps(data, sort_keys=True)
-        return f'{self.__class__.__name__}(name={self.name!r}, exchange={self.exchange}, override={self.override}, data={data})'
+        return (f'{self.__class__.__name__}(' +
+                ', '.join((
+                    f'name={self.name!r}',
+                    f'exchange={self.exchange}',
+                    f'override={self.override}',
+                    f'data={data})'
+                )))
 
-    def __init__(self,
-                 api: Optional[Api] =None,
-                 name: [str] =None,
-                 exchange: bool =False,
-                 data: Optional[dict] =None,
-                 debug: bool =DEBUG,
-                 override: bool =False) -> None:
+    def __init__( # pylint: disable=too-many-arguments
+            self,
+            api: Optional[Api] =None,
+            name: str =None,
+            exchange: bool =False,
+            data: Optional[dict] =None,
+            debug: bool =DEBUG,
+            override: bool =False) -> SelfSettings:
         """Create object for settings
 
         Args:
@@ -310,10 +409,7 @@ class Settings(object):
             override (bool): For domains only, True forces domain settings to all accounts
 
         Returns:
-            None
-
-        Raises:
-            None
+            Settings: Instance of Settings
         """
         self.api = None
         self.name = name
@@ -331,16 +427,20 @@ class Settings(object):
         if data is not None:
             self.load(data)
 
-    def __eq__(self, other):
+    def __eq__(
+            self,
+            other) -> bool:
         if len(self.data) != len(other.data):
             return False
 
-        if self.__is_exchange() != other.__is_exchange():
+        if self.is_exchange != other.is_exchange:
             return False
 
         return self.data == other.data
 
-    def _validate_override(self, override: Optional[bool] =None) -> bool:
+    def _validate_override(
+            self,
+            override: Optional[bool] =None) -> bool:
         """Validate if override is valid in context
 
         Args:
@@ -357,53 +457,58 @@ class Settings(object):
             override = self.override
 
         # override is not valid in account context
-        if override and self.__is_account():
+        if override and self.is_account:
+            # pylint: disable=broad-exception-raised
             raise Exception('Cannot set override on user settings')
 
         return True
 
     @staticmethod
-    def __fix_value(k, v):
+    def __fix_value(
+            key: str,
+            val: Any) -> Any:
         """STATIC: Fix setting values
 
         Yaml settings turn 'on'/'off' into True/False
 
         Args:
-            k (str): Name of value
-            v (Any): Value to fix
+            key (str): Name of value
+            val (Any): Value to fix
 
         Returns:
             Any: Fixed value
-
-        Raises:
-            None
         """
         # Search and fix on/off values
-        if k in ('filterLevel', 'forwardToDomainQuarantine'):
-            if v is True:
-                v = 'on'
+        if key in ('filterLevel', 'forwardToDomainQuarantine'):
+            if val is True:
+                val = 'on'
 
-            elif v is False:
-                v = 'off'
+            elif val is False:
+                val = 'off'
 
             # Short circuit any other checks
-            return v
+            return val
 
-        return v
+        return val
 
-    def __is_domain(self) -> bool:
+    @property
+    def is_domain(self) -> bool:
         """Test if the context is domain settings"""
         return self.name is None
 
-    def __is_account(self) -> bool:
+    @property
+    def is_account(self) -> bool:
         """Test if the context is account settings"""
-        return not self.__is_domain()
+        return not self.is_domain
 
-    def __is_exchange(self) -> bool:
+    @property
+    def is_exchange(self) -> bool:
         """Test if the context is an exchange account"""
         return self.exchange
 
-    def diff(self, other: Settings) -> List[tuple]:
+    def diff(
+            self,
+            other: Settings) -> List[tuple]:
         """Generate differences compared to another Settings object
 
         Args:
@@ -411,37 +516,31 @@ class Settings(object):
 
         Returns:
             List[tuple]: Tuples of key, our value, their value
-
-        Raises:
-            None
         """
         diff = []
-        for k in set(self.data) | set(other.data):
-            if self.data[k] != other.data[k]:
-                diff.append((k, self.data[k].get(), other.data[k].get()))
+        for key in set(self.data) | set(other.data):
+            if self.data[key] != other.data[key]:
+                diff.append((key, self.data[key].value, other.data[key].value))
         return diff
 
-    def load(self, data: dict, src: str ='cfg') -> None:
+    def load( # pylint: disable=unused-argument
+            self,
+            data: dict,
+            src: str ='cfg') -> None:
         """Load settings from dict into our object
 
         Args:
             data (dict): settings to load
             src (str): Source of our settings (cfg or api)
-
-        Returns:
-            None
-
-        Raises:
-            None
         """
         settings = self.data
 
         # yaml 'on' becomes True and 'off' becomes False.  These
         # need to stay 'on' and 'off'
-        k = 'filterLevel'
-        if k in data:
+        key = 'filterLevel'
+        if key in data:
             # save the fixed value in the Field of the setting
-            settings[k].set(self.__fix_value(k, data[k]))
+            settings[key].value = self.__fix_value(key, data[key])
 
         #           ------------- from API --------------  ---- from config ----
         for sub in ('rsEmailSettings', 'exchangeSettings', 'rsEmail', 'exchange'):
@@ -449,7 +548,7 @@ class Settings(object):
                 continue
 
             # exchange accounts don't have a prefix
-            if self.__is_account() and self.__is_exchange():
+            if self.is_account and self.is_exchange:
                 prefix = ''
 
             # domain exchange settings are prefixed with 'exchange.'
@@ -462,91 +561,106 @@ class Settings(object):
 
             ### Don't you love consistent, simplified interfaces.  Wish rackspace had one
 
-            for k,v in data[sub].items():
+            for key, val in data[sub].items():
                 # save the fixed value in the Field of the setting
-                settings[f'{prefix}{k}'].set(self.__fix_value(k, v))
+                settings[f'{prefix}{key}'].value = self.__fix_value(key, val)
 
     def _get_account_path(self) -> str:
         """Get the account path, if we're in an account context
 
-        Args:
-            None
-
         Returns:
             str: Empty string for domain context, else the path segment for accounts
-
-        Raises:
-            None
         """
-        if self.__is_domain():
+        if self.is_domain:
             return ''
 
         # what account path type to use, 'ex' for exchange, 'rs' for rackspace
         qtype = 'ex' if self.exchange else 'rs'
 
-        return f'/{qtype}/mailboxes/{self.name}'
+        return f'{qtype}/mailboxes/{self.name}'
 
-    def get(self, *pargs, **kwargs) -> Settings:
+    def get(
+            self,
+            *pargs,
+            **kwargs) -> Optional[Settings]:
         """API: Get spam settings object from the API
-
-        Args:
-            None
 
         Returns:
             Settings: New Settings object for API spam settings
-
-        Raises:
-            None
         """
         account = self._get_account_path()
-        path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}{account}/spam/settings'
+        path = '/'.join((
+            '', # Force leading /
+            'v1',
+            'customers',
+            str(self.api.customer),
+            'domains',
+            self.api.domain,
+            account,
+            'spam',
+            'settings'
+        ))
+        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/settings'
 
         response = self.api.get(path, *pargs, **kwargs)
 
-        if not self.api._success(response):
+        if not self.api._success(response): # pylint: disable=protected-access
             return None
 
         # Probably a better way to do this
-        return Settings(api=self.api, name=self.name, data=response.json(), exchange=self.exchange, debug=self.debug)
+        return Settings(
+            api=self.api,
+            name=self.name,
+            data=response.json(),
+            exchange=self.exchange,
+            debug=self.debug)
 
     def _get_fields(self) -> dict:
         """Get our list of setting fields for this context
 
-        Args:
-            None
-
         Returns:
-            dict
-
-        Raises:
-            None
+            dict: Copy of the fields
         """
         cls = self.__class__
 
         # Check for domain context
-        if self.__is_domain():
-            fields = cls.__DOMAIN_FIELDS
+        if self.is_domain:
+            fields = cls.__DOMAIN_FIELDS # pylint: disable=protected-access
 
         # check for exchange account context
-        elif self.__is_exchange():
-            fields = cls.__ACCOUNT_EX_FIELDS
+        elif self.is_exchange:
+            fields = cls.__ACCOUNT_EX_FIELDS # pylint: disable=protected-access
 
         # we should be non-exchange account context
         else:
-            fields = cls.__ACCOUNT_RS_FIELDS
+            fields = cls.__ACCOUNT_RS_FIELDS # pylint: disable=protected-access
 
         # Deep Copy to prevent accidential mutable defaults
         # from popping up.  I.E.
         # a = Settings()  from config
-        # b = a.get()  get rackspace settings.  This could override
+        # b = a.value  get rackspace settings.  This could override
         #              the settings in 'a', because they started from
         #              the same dictionary of objects
         return copy.deepcopy(fields)
 
-    def set(self, *pwargs, **kwargs):
+    def set(
+            self,
+            *pwargs,
+            **kwargs):
+        """
+        Unknown
+
+        Returns:
+            _type_: _description_
+        """
+        print(f'{self.__class__.__name__}.set() is called, but appears to be recursive')
         return self.set(*pwargs, **kwargs)
 
-    def update(self, override: bool =None, *pargs, **kwargs) -> bool:
+    def update( # pylint: disable=keyword-arg-before-vararg
+            self,
+            override: Optional[bool] =None,
+            *pargs,
+            **kwargs) -> bool:
         """API: Update any settings changes to the API
 
         Args:
@@ -554,12 +668,20 @@ class Settings(object):
 
         Returns:
             bool: Success condition of API call
-
-        Raises:
-            None
         """
         account = self._get_account_path()
-        path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}{account}/spam/settings'
+        path = '/'.join((
+            '', # Force leading /
+            'v1',
+            'customers',
+            str(self.api.customer),
+            'domains',
+            self.api.domain,
+            account,
+            'spam',
+            'settings'
+        ))
+        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/settings'
 
         if override is None:
             override = self.override
@@ -571,11 +693,11 @@ class Settings(object):
         data = dict(self.data)
 
         # toFolder is mutually exclusive to 'SpamForwardingAddress'
-        if data.get('rsEmail.spamHandling', Field(str, '')).get() == 'toFolder':
+        if data.get('rsEmail.spamHandling', Field(str, '')).value == 'toFolder':
             data.pop('rsEmail.spamForwardingAddress')
 
-        # toAddress is mutually exclusive to 'hasFolderCleaner', 'spamFolderAgeLimit' and 'spamFolderNumLimit'
-        elif data.get('rsEmail.spamHandling', Field(str, '')).get() == 'toAddress':
+        # toAddress is mutually exclusive to 'hasFolderCleaner', 'spamFolderAgeLimit' and 'spamFolderNumLimit' # pylint: disable=line-too-long
+        elif data.get('rsEmail.spamHandling', Field(str, '')).value == 'toAddress':
             for x in ('hasFolderCleaner', 'spamFolderAgeLimit', 'spamFolderNumLimit'):
                 data.pop(f'rsEmail.{x}')
 
@@ -583,33 +705,41 @@ class Settings(object):
         if override:
             data.update({'overrideUserSettings': Field(bool, True)})
 
-        # Convert {k: Field()} to normal {k: v} dict for API call
-        data = {k: v.get() for k,v in data.items()}
+        # Convert {key: Field()} to normal {key: val} dict for API call
+        data = {key: val.value for key,val in data.items()}
 
         if self.debug:
             print(f"\n{path}\n   SPAM SETTINGS SET: '{data}'")
             return True
-        else:
-            response = self.api.put(path, data, *pargs, **kwargs)
-            return self.api._success(response)
 
-class ACL(object):
+        response = self.api.put(path, data, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
+
+class ACL():
     """ACL object for spam settings"""
-    def __repr__(self):
+    def __repr__(self) -> str:
         data = json.dumps(sorted(self.data), sort_keys=True)
-        return f'{self.__class__.__name__}(acl={self.acl!r}, name={self.name!r}, exchange={self.exchange}, data={data})'
+        return (f'{self.__class__.__name__}(' +
+                ', '.join((
+                    f'acl={self.acl!r}',
+                    f'name={self.name!r}',
+                    f'exchange={self.exchange}',
+                    f'data={data})'
+                )))
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return set(self.data) == set(other.data)
 
-    def __init__(self,
-                 acl: str,
-                 api: Optional[Api] =None,
-                 name: Optional[str] =None,
-                 exchange: bool=False,
-                 data: Any[dict, list] =None,
-                 debug: bool =DEBUG,
-                 *pargs, **kwargs) -> None:
+    def __init__( # pylint: disable=too-many-arguments,keyword-arg-before-vararg,unused-argument
+            self,
+            acl: str,
+            api: Optional[Api] = None,
+            name: Optional[str] = None,
+            exchange: Optional[bool] = False,
+            data: Any[dict, list] = None,
+            debug: Optional[bool] = DEBUG,
+            *pargs,
+            **kwargs) -> SelfACL:
         """Create an ACL object for spam ACLs
 
         Args:
@@ -618,12 +748,6 @@ class ACL(object):
             exchange (bool): If this is for an exchange account
             data (dict): ACL settings data
             debug (bool): True for debug mode, no changes written
-
-        Returns:
-            None
-
-        Raises:
-            None
         """
         self.api = api
         self.name = name
@@ -645,34 +769,24 @@ class ACL(object):
             else:
                 self.load(data)
 
-    def load(self, data: list) -> None:
+    def load(
+            self,
+            data: list) -> None:
         """Load config data into this ACL
 
         Args:
             data (list): List of addresses/IPs to load
-
-        Returns:
-            None
-
-        Raises:
-            None
         """
         if not isinstance(data, list):
             raise TypeError('ACL must be a list format of addresses or IPs')
 
         self.data = list(set(data))
 
-    def _get_account_path(self):
+    def _get_account_path(self) -> str:
         """Get the account path, if we're in an account context
-
-        Args:
-            None
 
         Returns:
             str: Empty string for domain context, else the path segment for accounts
-
-        Raises:
-            None
         """
         if self.name is None:
             return ''
@@ -682,30 +796,45 @@ class ACL(object):
 
         return f'/{qtype}/mailboxes/{self.name}'
 
-    def get(self, *pargs, **kwargs) -> ACL:
+    def get(
+            self,
+            *pargs,
+            **kwargs) -> ACL:
         """API: Get spam ACL object from the API
-
-        Args:
-            None
 
         Returns:
             Settings: New ACL object for API spam ACL
-
-        Raises:
-            None
         """
         account = self._get_account_path()
-        path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}{account}/spam/{self.acl}'
+        path = '/'.join((
+            '', # force leading /
+            'v1',
+            'customers',
+            str(self.api.customer),
+            'domains',
+            self.api.domain,
+            account,
+            'spam',
+            self.acl
+        ))
+        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/{self.acl}'
 
         response = self.api.get(path, *pargs, **kwargs)
 
-        if not self.api._success(response):
+        if not self.api._success(response): # pylint: disable=protected-access
             return None
 
         # Probably a better way to do this
-        return ACL(acl=self.acl, api=self.api, name=self.name, exchange=self.exchange, data=response.json(), debug=self.debug)
+        return ACL(acl=self.acl,
+                   api=self.api,
+                   name=self.name,
+                   exchange=self.exchange,
+                   data=response.json(),
+                   debug=self.debug)
 
-    def diff(self, other: ACL) -> Any[dict, None]:
+    def diff(
+            self,
+            other: ACL) -> Optional[dict]:
         """Return API compatible difference between this and other ACl object
 
         Args:
@@ -714,9 +843,6 @@ class ACL(object):
         Returns:
             dict: API compatible difference between ACLs,
                   None if no differences
-
-        Raises:
-            None
         """
         if self == other:
             return None
@@ -725,28 +851,36 @@ class ACL(object):
         diff = {'addList': set(), 'removeList': set()}
 
         # bi-directional compare
-        for k, src, dst in (('addList', self, other), ('removeList', other, self)):
+        for key, src, dst in (('addList', self, other), ('removeList', other, self)):
             for x in src.data:
                 if x not in dst.data:
-                    diff[k].add(x)
+                    diff[key].add(x)
 
         # Use a list, as we are likely to remove keys in-flight
-        for k in list(diff):
-            v = diff[k]
+        for key in list(diff):
+            val = diff[key]
 
-            if not v:
-                diff.pop(k)
+            if not val:
+                diff.pop(key)
 
             else:
-                diff[k] = ','.join(v)
+                diff[key] = ','.join(val)
 
         # return our modified diff
         return diff
 
-    def set(self, *pargs, **kwargs):
+    def set(
+            self,
+            *pargs,
+            **kwargs) -> bool:
+        """See .update()"""
         return self.update(*pargs, **kwargs)
 
-    def update(self, data: dict, *pargs, **kwargs) -> bool:
+    def update(
+            self,
+            data: dict,
+            *pargs,
+            **kwargs) -> bool:
         """API: Update ACL changes with the API
 
         Args:
@@ -754,22 +888,30 @@ class ACL(object):
 
         Returns:
             bool: Success condition of API call
-
-        Raises:
-            None
         """
         if not data:
             return True
 
         account = self._get_account_path()
-        path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}{account}/spam/{self.acl}'
+        path = '/'.join((
+            '', # Force leading /
+            'v1',
+            'customers',
+            str(self.api.customer),
+            'domains',
+            self.api.domain,
+            account,
+            'spam',
+            self.acl
+        ))
+        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/{self.acl}'
 
         if self.debug:
             print(f"\n{path}\n   SPAM SETTINGS ACL '{self.acl}': '{data}'")
             return True
-        else:
-            response = self.api.put(path, data, *pargs, **kwargs)
-            return self.api._success(response)
+
+        response = self.api.put(path, data, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
 
 
 ### GET /customers/12345678/domains/example.com/spam/settings

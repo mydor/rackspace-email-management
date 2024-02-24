@@ -1,8 +1,17 @@
+"""Handle Rackspace Accounts"""
 from __future__ import annotations
 
-from typing import Any, Optional
+__author__ = 'Michael Smith'
+
+from typing import Any, Optional, TypeVar
+
+import json
+import requests
 
 from .api import Api
+
+SelfAccount = TypeVar("SelfAccount", bound="Account")
+SelfAccounts = TypeVar("SelfAccounts", bound="Accounts")
 
 DEBUG = False
 
@@ -17,14 +26,16 @@ DEBUG = False
 # being passed to PUT.
 
 class DuplicateLoadError(Exception):
-    pass
+    """Repeated Load Error"""
+    pass # pylint: disable=unnecessary-pass
 
 
 class RetrieveLimit(Exception):
-    pass
+    """Exceeded Retrieval Limit"""
+    pass # pylint: disable=unnecessary-pass
 
 
-class Account(object):
+class Account():
     """Account object with all knowledge for a single account
 
     Attributes(cls):
@@ -108,12 +119,13 @@ class Account(object):
             'size',
             ]
 
-    def __init__(self,
-                 name: str,
-                 data: dict =None,
-                 api: Api =None,
-                 response: Api.requests.Response =None,
-                 debug: bool =DEBUG) -> None:
+    def __init__( # pylint: disable=too-many-arguments
+            self,
+            name: str,
+            data: dict =None,
+            api: Api =None,
+            response: Api.requests.Response =None,
+            debug: bool =DEBUG) -> SelfAccount:
         """Create an Account object
 
         Instantiate an object of Account
@@ -141,8 +153,8 @@ class Account(object):
         if api is not None:
             self.api = api
 
-        for k,v in self.__class__.__DEFAULTS.items():
-            setattr(self, k, v)
+        for key,val in Account.__DEFAULTS.items():
+            setattr(self, key, val)
 
         if data:
             self.load(data)
@@ -150,7 +162,7 @@ class Account(object):
 
     def __str__(self) -> str:
         data = f'name: "{self.name}"'
-        for field in self.__class__.__FIELDS:
+        for field in Account.__FIELDS:
             if field == 'name':
                 continue
 
@@ -166,18 +178,26 @@ class Account(object):
         return self.__str__()
 
     @property
-    def success(self):
-        return self.api._success(self.response, output=False)
+    def success(self) -> bool:
+        """Check if API call returned successfully"""
+        return self.api._success(self.response, output=False) # pylint: disable=protected-access
 
     @property
-    def canRecover(self):
+    def canRecover(self) -> bool: # pylint: disable=invalid-name
+        """Check if API call can be recovered"""
         try:
             data = self.response.json()
-            return data is not None and data.get('itemNotFoundFault',{}).get('additionalData', {}).get('isRecoverable', False)
-        except:
+        except requests.exceptions.JSONDecodeError:
             return False
 
-    def load(self, data: dict, _sub=False) -> None:
+        return data is not None and data.get('itemNotFoundFault', {})\
+            .get('additionalData', {})\
+            .get('isRecoverable', False)
+
+    def load( # pylint: disable=too-many-branches
+            self,
+            data: dict,
+            _sub=False) -> None:
         """Load data into Account object
 
         Loads data into the account object.  This is either from
@@ -200,52 +220,56 @@ class Account(object):
         if self.loaded:
             raise DuplicateLoadError('Attempt to load data into already initialized Account')
 
-        fields = self.__class__.__FIELDS
+        fields = Account.__FIELDS
         ignore = [ 'aliases', 'spam' ]
 
-        for k,v in data.items():
-            if k in ignore:
+        for key,val in data.items():
+            if key in ignore:
                 continue
 
-            elif k == 'contactInfo':
-                self.load(v, _sub=True)
+            if key == 'contactInfo':
+                self.load(val, _sub=True)
                 continue
 
-            elif k == 'emailForwardingAddressList':
-                k = 'enableForwardingAddresses'
-                v = ','.join(v)
+            if key == 'emailForwardingAddressList':
+                key = 'enableForwardingAddresses'
+                val = ','.join(val)
 
-            if k not in fields:
-                print('Unknown field {} found'.format(k))
+            if key not in fields:
+                print(f'Unknown field {key} found')
                 continue
 
-            if v is None and fields[k] is str:
-                v = ""
+            if val is None and fields[key] is str:
+                val = ""
 
-            if not isinstance(v, fields[k]):
-                if fields[k] is int:
-                    v = fields[k](v)
+            if not isinstance(val, fields[key]):
+                if fields[key] is int:
+                    val = fields[key](val) # turn string to int
+
                 else:
-                    raise TypeError('{} is type {}, instead of type {}'.format(k, type(v), fields[k]))
+                    raise TypeError(
+                        f'{key} is type {type(val)}, instead of type {fields[key]}')
 
             # Rackspace likes to sometimes turn empty strings to a single space
-            if isinstance(v, str) and v == ' ':
-                v = ''
+            if isinstance(val, str) and val == ' ':
+                val = ''
 
-            x = fields[k](v)
-            setattr(self, k, x)
+            tmp_val = fields[key](val)
+            setattr(self, key, tmp_val)
 
         if getattr(self, 'displayName', '') == '':
-            fn = getattr(self, 'firstName', '')
-            ln = getattr(self, 'lastName', '')
-            if fn or ln:
-                setattr(self, 'displayName', ' '.join((fn, ln)).strip())
+            fname = getattr(self, 'firstName', '')
+            lname = getattr(self, 'lastName', '')
+            if fname or lname:
+                setattr(self, 'displayName', ' '.join((fname, lname)).strip())
 
         # Only the parent call is allowed to set the loaded flag
         if _sub is False:
             self.loaded=True
 
-    def diff(self, other_account: Account) -> dict:
+    def diff(
+            self,
+            other_account: Account) -> dict:
         """Compares two Account objects
 
         Compares this (self) Account object to another Account object
@@ -265,33 +289,36 @@ class Account(object):
         # a single value, no lists or dicts
         # Thus, we are only concerned with what needs to be changed,
         # don't have to worry about what to remove as with Alias objects
-        fields = self.__class__.__FIELDS
-        readonly = self.__class__.__READONLY
+        fields = Account.__FIELDS
+        readonly = Account.__READONLY
         ignore = ['password', 'recoverDeleted', 'name', 'spam']
 
         diff = {}
-        for field in fields:
+        for field, ftype in fields.items():
             if field in readonly or field in ignore:
                 continue
 
-            default: Any = None
-            if fields[field] is str:
+            default: Optional[str | int | bool] = None
+            if ftype is str:
                 default = ''
 
-            elif fields[field] is int:
+            elif ftype is int:
                 default = 0
 
-            elif fields[field] is bool:
+            elif ftype is bool:
                 default = False
 
-            v1 = getattr(self, field, default)
-            v2 = getattr(other_account, field, default)
-            if v1 != v2:
-                diff.update({field: v1})
+            new_val = getattr(self, field, default)
+            old_val = getattr(other_account, field, default)
+            if new_val != old_val:
+                diff.update({field: new_val})
 
         return diff
 
-    def get(self, *pargs: list, **kwargs: dict) -> Optional[Account]:
+    def get(
+            self,
+            *pargs: Optional[list],
+            **kwargs: Optional[dict]) -> Optional[Account]:
         """API: Get the account data from rackspace
 
         Calls the rackspace API to retrieve the account data
@@ -305,16 +332,21 @@ class Account(object):
         Raises:
            None
         """
-        path = f'{self.api._account_path(self.name)}'
+        path = f'{self.api._account_path(self.name)}' # pylint: disable=protected-access
 
         response = self.api.get(path, *pargs, **kwargs)
 
-        if not self.api._success(response):
+        if not self.api._success(response): # pylint: disable=protected-access
             return Account(self.name, api=self.api, data=self.data, response=response)
 
         return Account(self.name, api=self.api, data=response.json(), response=response)
 
-    def add(self, data: dict =None, recover: bool =False, *pargs: list, **kwargs: dict) -> bool:
+    def add( # pylint: disable=keyword-arg-before-vararg
+            self,
+            data: Optional[dict] =None,
+            recover: Optional[bool] =False,
+            *pargs: Optional[list],
+            **kwargs: Optional[dict]) -> bool:
         """API: Add a new rackspace account
 
         Adds the account to rackspace
@@ -329,11 +361,11 @@ class Account(object):
         Raises:
            None
         """
-        path = f'{self.api._account_path(self.name)}'
+        path = f'{self.api._account_path(self.name)}' # pylint: disable=protected-access
 
-        fields = self.__class__.__FIELDS
-        readonly = self.__class__.__READONLY
-        required = self.__class__.__ADD_REQUIRED
+        fields = Account.__FIELDS
+        readonly = Account.__READONLY
+        required = Account.__ADD_REQUIRED
 
         if data is None:
             data = {}
@@ -354,24 +386,26 @@ class Account(object):
         if recover:
             data['recoverDeleted'] = True
 
-        FAILED = False
+        is_failed = False
         for req in required:
             if req not in data:
                 print(f"Required field {req} missing")
-                FAILED = True
-        if FAILED:
+                is_failed = True
+        if is_failed:
             raise LookupError('Data missing required fields to add account')
 
         if self.debug:
             print(f"\n{path}\n   ACCOUNT ADD: '{self.name}'")
             return True
-        else:
-            import json
-            print(json.dumps(data, indent=4, sort_keys=True))
-            response = self.api.post(path, data, *pargs, **kwargs)
-            return self.api._success(response)
 
-    def remove(self, *pargs: list, **kwargs: dict) -> bool:
+        print(json.dumps(data, indent=4, sort_keys=True))
+        response = self.api.post(path, data, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
+
+    def remove(
+            self,
+            *pargs: Optional[list],
+            **kwargs: Optional[dict]) -> bool:
         """API: Remove the account from rackspace
 
         Removes the account from rackspace
@@ -384,19 +418,23 @@ class Account(object):
         Raises:
            None
         """
-        path = f'{self.api._account_path(self.name)}'
+        path = f'{self.api._account_path(self.name)}' # pylint: disable=protected-access
 
         if self.debug:
             print(f"\n{path}\n   ACCOUNT REMOVE: '{self.name}'")
             return True
-        else:
-            if not input(f"Are you sure you wish to delete {path} (Yes/No)? ").lower() in ('y', 'yes'):
-                return True
 
-            response = self.api.delete(path, *pargs, **kwargs)
-            return self.api._success(response)
+        if not input(f"Are you sure you wish to delete {path} (Yes/No)? ").lower() in ('y', 'yes'):
+            return True
 
-    def rename(self, newname: str, *pargs: list, **kwargs: dict) -> bool:
+        response = self.api.delete(path, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
+
+    def rename(
+            self,
+            newname: str,
+            *pargs: Optional[list],
+            **kwargs: Optional[dict]) -> bool:
         """API: Rename the account in rackspace
 
         Renames the account to a new account name
@@ -410,16 +448,20 @@ class Account(object):
         Raises:
            None
         """
-        path = f'{self.api._account_path(self.name)}'
+        path = f'{self.api._account_path(self.name)}' # pylint: disable=protected-access
 
         if self.debug:
             print(f"\n{path}\n   ACCOUNT RENAME: '{self.name}' -> '{newname}'")
             return True
-        else:
-            response = self.api.put(path, data={'name': newname}, *pargs, **kwargs)
-            return self.api._success(response)
 
-    def update(self, data: dict, *pargs: list, **kwargs: dict) -> bool:
+        response = self.api.put(path, data={'name': newname}, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
+
+    def update(
+            self,
+            data: dict,
+            *pargs: Optional[list],
+            **kwargs: Optional[dict]) -> bool:
         """API: Update the account in rackspace
 
         Updates the rackspace account, setting the fields to match `data` or self attributes
@@ -433,32 +475,40 @@ class Account(object):
         Raises:
            None
         """
-        path = f'{self.api._account_path(self.name)}'
+        path = f'{self.api._account_path(self.name)}' # pylint: disable=protected-access
 
         if self.debug:
             print(f"\n{path}\n   ACCOUNT UPDATE: '{self.name}' => {data}")
             return True
-        else:
-            response = self.api.put(path, data=data, *pargs, **kwargs)
-            return self.api._success(response)
+
+        response = self.api.put(path, data=data, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
 
 
-class Accounts(object):
-    def __init__(self, api: Api, debug: bool =DEBUG) -> None:
+class Accounts(): # pylint: disable=too-few-public-methods
+    """Get all accounts via API"""
+    def __init__(
+            self,
+            api: Api,
+            debug: Optional[bool] =DEBUG) -> SelfAccounts:
         self.api = api
         self.debug = debug
 
         self.api.gen_auth()
 
-    def get(self, limit=None, *pargs: list, **kwargs: dict) -> dict:
+    def get( # pylint: disable=keyword-arg-before-vararg
+            self,
+            limit: Optional[int] =None,
+            *pargs: Optional[list],
+            **kwargs: Optional[dict]) -> dict:
         """API: Get list of accounts
 
         Get a list of all accounts, instantiating Account objects for them
 
         Args:
            limit (int, optional): Maximum number of accounts to return
-           size (int, optional): Number of entries per page to return, default 50
-           offset (int, optional): Page number to get `size` entries
+           size (int, optional): Number of entries per page to return, default 50 !!kwargs
+           offset (int, optional): Page number to get `size` entries !!kwargs
 
         Returns:
            dict: {`name`: Account()} list of accounts
@@ -468,9 +518,10 @@ class Accounts(object):
         """
         accounts: dict = {}
 
-        path = f'{self.api._accounts_path()}/'
+        path = f'{self.api._accounts_path()}/' # pylint: disable=protected-access
 
         while True:
+            # pylint: disable=duplicate-code
             response = self.api.get(path, *pargs, **kwargs)
             assert response.status_code == 200 and response.text
             data = response.json()

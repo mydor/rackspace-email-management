@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
+"""Full syncronize mail config with RackSpace"""
 
 import argparse
 import copy
 import hashlib
 import json
 import os
-import time
+import pathlib
+# import time
+import typing
 import yaml
 
 from rackspace import Account, Accounts
@@ -18,13 +21,36 @@ SYNC_DIR    = 'tmp'
 DEBUG = False
 ACCOUNT_FIELDS = ('firstName', 'lastName', 'displayName', 'enabled', 'password')
 
-def load_md5(fname):
-    with open(fname, 'r') as fh:
+def load_md5(fname: str) -> str:
+    """
+    Load MD5 checksum from file
+
+    Args:
+        fname(str): Filename to load MD5 checksum from
+
+    Returns:
+        str: the MD5 checksum string
+    """
+    with open(fname, 'rt', encoding='utf-8') as fh:
         md5 = fh.read()
 
     return md5
 
-def save_md5(target, md5, debug=False):
+def save_md5( # pylint: disable=unused-argument
+        target: str,
+        md5: str,
+        debug: typing.Optional[bool] =False) -> None:
+    """
+    Save MD5 checksum to file
+
+    Args:
+        target(str): Filename (without extension)
+        md5(str): MD5 checksum string to save
+        debug(bool, optional): Debug flag
+
+    Returns:
+        None
+    """
     # Don't overwrite if the data hasn't changed, preserves the timestamp
     # of the file, showing the last time it was updated
     md5_file = f'{target}.md5'
@@ -35,29 +61,74 @@ def save_md5(target, md5, debug=False):
     except FileNotFoundError:
         pass
 
-    with open(md5_file, 'w') as fh:
-        fh.write(md5)
+    with open(md5_file, 'wt', encoding='utf-8') as fin:
+        fin.write(md5)
 
-def store(src, address, data, data_dir, debug=False):
+def save_json( # pylint: disable=unused-argument
+        target: str,
+        json_data: str,
+        debug: typing.Optional[bool] =False) -> None:
+    """
+    Save JSON data to file
+
+    Args:
+        target(str): Filename (without extension)
+        json_data(str): JSON data string to save
+        debug(bool, optional): Debug flag
+
+    Returns:
+        None
+    """
+    json_file = f'{target}.json'
+
+    with open(json_file, 'wt', encoding='utf-8') as fout:
+        fout.write(json_data)
+
+def store(src: str,
+          address: str,
+          data: dict,
+          data_dir: str,
+          debug: typing.Optional[bool] =False) -> None:
+    """
+    Store mail element settings
+
+    Args:
+        src(str): Data type (account, alias, etc)
+        address(str): Email address of element to store
+        data(dict): Mail element data to store
+        data_dir(str): Path of sync directory
+        debug(bool, optional): Debug flag
+
+    Returns:
+        None
+    """
     if len(data) < 1:
         return
 
     target = os.path.join(data_dir, f'{"." if debug else ""}{address}-{src}')
 
     json_data = json.dumps(data, sort_keys=True)
-
-    with open(f'{target}.json', 'w') as fh:
-        fh.write(json_data)
+    save_json(target, json_data)
 
     md5 = hashlib.md5(json_data.encode()).hexdigest()
     save_md5(target, md5)
 
-def load_config(name=None):
+def load_config(
+        name: typing.Optional[str] =None) -> dict:
+    """
+    Load config
+
+    Args:
+        name(str, optional): Config filename
+
+    Returns:
+        dict: Full config as dictionary
+    """
     if name is None:
         name = CONFIG_FILE
 
-    with open(name, 'r') as fh:
-        raw = fh.read()
+    with open(name, 'rt', encoding='utf-8') as fin:
+        raw = fin.read()
 
     data = yaml.safe_load(raw)
 
@@ -65,7 +136,8 @@ def load_config(name=None):
         domains = {}
 
         for domain in data['domains']:
-            domain_file = '{}.yml'.format(os.path.join(data.get('conf_dir', CONFIG_DIR), domain))
+            domain_file = f'{os.path.join(data.get("conf_dir", CONFIG_DIR), domain)}.yml'
+            # domain_file = '{}.yml'.format(os.path.join(data.get('conf_dir', CONFIG_DIR), domain))
             domain_data = load_config(domain_file)
             domains[domain] = domain_data
 
@@ -73,7 +145,23 @@ def load_config(name=None):
 
     return data
 
-def _init_accounts(domain, data, api):
+def init_accounts(
+        domain: str,
+        data: dict,
+        api: Api) -> typing.Tuple[dict, dict]:
+    """
+    Initialize account data for processing
+
+    Args:
+        domain(str): Domain name of accounts
+        data(dict): Configuration data of accounts
+        api(Api): API object
+
+    Returns:
+        tuple:
+            dict: accounts
+            dict: aliases
+    """
     accounts = {}
     aliases = {}
 
@@ -97,7 +185,16 @@ def _init_accounts(domain, data, api):
 
     return accounts, aliases
 
-def store_account(account):
+def store_account(account: dict) -> None:
+    """
+    Store account data
+
+    Args:
+        account(dict): Account data
+
+    Returns:
+        None
+    """
     data = {}
     for field in ACCOUNT_FIELDS:
         if field in account.data:
@@ -105,11 +202,25 @@ def store_account(account):
 
     store('account', account.name, data, SYNC_DIR, debug=DEBUG)
 
-def process_accounts(cfg_accounts, rs_accounts, domain):
+def process_accounts( # pylint: disable=unused-argument
+        cfg_accounts: dict,
+        rs_accounts: dict,
+        domain: str) -> None:
+    """
+    Process Account with RackSpace
+
+    Args:
+        cfg_accounts(dict): Local account config
+        rs_accounts(dict): RackSpace account config
+        domain(str): Domain name of account space
+
+    Returns:
+        None
+    """
     print('- Accounts(process)')
     for name, account in cfg_accounts.items():
         # print(account)
-        # Account({name: "michael.smith@moonlightimagery.com", displayName: "Michael Smith", enabled: "True", firstName: "Michael", lastName: "Smith", size: "25600", visibleInExchangeGAL: "True", visibleInRackspaceEmailCompanyDirectory: "True"})
+        # Account({name: "michael.smith@moonlightimagery.com", displayName: "Michael Smith", enabled: "True", firstName: "Michael", lastName: "Smith", size: "25600", visibleInExchangeGAL: "True", visibleInRackspaceEmailCompanyDirectory: "True"}) # pylint: disable=line-too-long
         # {"firstName": "Michael", "lastName": "Smith"}
 
         if name not in rs_accounts:
@@ -129,11 +240,37 @@ def process_accounts(cfg_accounts, rs_accounts, domain):
         if name not in cfg_accounts:
             account.remove()
 
-def store_alias(alias, domain):
+def store_alias(
+        alias: Alias,
+        domain: str) -> None:
+    """
+    Store alias to file
+
+    Args:
+        alias(Alias): Alias object
+        domain(str): Domain of alias
+
+    Returns:
+        None
+    """
     email = '@'.join((alias.name, domain))
     store('alias', email, alias.data, SYNC_DIR, debug=DEBUG)
 
-def process_aliases(cfg_aliases, rs_aliases, domain):
+def process_aliases(
+        cfg_aliases: dict,
+        rs_aliases: dict,
+        domain: str) -> None:
+    """
+    Process aliases with RackSpace
+
+    Args:
+        cfg_aliases(dict): Local aliases
+        rs_aliases(dict): RackSpace aliases
+        domain(str): Domain name of aliases
+
+    Returns:
+        None
+    """
     print('- Aliases(process)')
     for name, alias in cfg_aliases.items():
 
@@ -151,13 +288,41 @@ def process_aliases(cfg_aliases, rs_aliases, domain):
         if name not in cfg_aliases:
             alias.remove()
 
-def store_spam(_type, account, data):
-    if _type == 'settings':
-        _type = 'spam'
+def store_spam(
+        spam_type: str,
+        account: str,
+        data: dict) -> None:
+    """
+    Save spam settings to file
 
-    store(_type, account, data, SYNC_DIR, debug=DEBUG)
+    Args:
+        spam_type(str): Type of spam settings (settings or ACL)
+        account(str): Account of spam settings
+        data(dict): Spam settings of account
 
-def process_spam(api, data: dict, name: str =None):
+    Returns:
+        None
+    """
+    if spam_type == 'settings':
+        spam_type = 'spam'
+
+    store(spam_type, account, data, SYNC_DIR, debug=DEBUG)
+
+def process_spam(
+        api: Api,
+        data: dict,
+        name: str =None) -> None:
+    """
+    Process spam settings
+
+    Args:
+        api(Api): Api object
+        data(dict): Spam settings
+        name(str, optional): Account name of spam settings
+
+    Returns:
+        None
+    """
     account = f'{"" if name is None else f"{name}"}@{api.domain}'
 
     print(f'- Spam {account}')
@@ -182,7 +347,21 @@ def process_spam(api, data: dict, name: str =None):
 
                 store_spam(stype, account, sdata)
 
-def process_domain(domain, data, api):
+def process_domain(
+        domain: str,
+        data: dict,
+        api: Api) -> None:
+    """
+    Process domain settings (accounts, aliases, etc)
+
+    Args:
+        domain(str): Domain name being processed
+        data(dict): Domain data
+        api(Api): Api object
+
+    Returns:
+        None
+    """
     api.set_domain(domain)
 
     print(f'DOMAIN: {domain}')
@@ -192,50 +371,88 @@ def process_domain(domain, data, api):
 
     if 'accounts' in data:
         print('- Accounts/Aliases(get)')
-        accounts, aliases = _init_accounts(domain, data['accounts'], api)
+        accounts, aliases = init_accounts(domain, data['accounts'], api)
 
         process_accounts(accounts, Accounts(api, debug=DEBUG).get(), domain)
         process_aliases(aliases, Aliases(api, debug=DEBUG).get(), domain)
 
-def sync(CONFIG):
-    api = Api(**CONFIG)
+def sync(config: dict) -> None:
+    """
+    Sync mail settings with RackSpace
 
-    for domain, domain_cfg in CONFIG['domains'].items():
+    Args:
+        config(dict): Full config data
+
+    Returns:
+        None
+    """
+    api = Api(**config)
+
+    for domain, domain_cfg in config['domains'].items():
 
         if domain == 'XXXmoonlightimagery.com':
             continue
 
         process_domain(domain, domain_cfg, api)
 
-def wait_for_change(args, CONFIG):
-    change_file = os.path.join(args.dir, ('changed'))
-    while True:
-        if not os.path.exists(change_file):
-            time.sleep(1)
-            continue
+# def wait_for_change(
+#         args: argparse.Namespace,
+#         config: str) -> dict:
+#     """
+#     Monitor for config changes  *** NOT IMPLEMENTED ***
 
-        os.remove(change_file)
-        break
+#     Args:
+#         args(argparse.Namespace): Command line switches
+#         config(str): Full config data
 
-    return load_config(args.conf)
+#     Returns:
+#         dict:
+#     """
+#     change_file = os.path.join(args.dir, ('changed'))
+#     while True:
+#         if not os.path.exists(change_file):
+#             time.sleep(1)
+#             continue
 
-if __name__ == '__main__':
+#         os.remove(change_file)
+#         break
+
+#     return load_config(args.conf)
+
+def main() -> None:
+    """Main entry point"""
+    # pylint: disable=duplicate-code
     parser = argparse.ArgumentParser()
+    parser.add_argument('--conf', '-c',
+                        help="Config file",
+                        type=pathlib.Path,
+                        metavar='<FILE>',
+                        default=CONFIG_FILE)
+    parser.add_argument('--data', '-d',
+                        help="Where supplemental config files are stored",
+                        type=pathlib.Path,
+                        metavar='<DIR>',
+                        default=SYNC_DIR)
+
     parser.add_argument('--watch', '-w', default=False, action='store_true')
-    parser.add_argument('--dir', '-d', default=CONFIG_DIR)
-    parser.add_argument('--conf', '-c', default=CONFIG_FILE)
+    # parser.add_argument('--dir', '-d', default=CONFIG_DIR)
+    # parser.add_argument('--conf', '-c', default=CONFIG_FILE)
     args = parser.parse_args()
 
     if not os.path.exists(args.conf):
         args.conf = os.path.join(args.dir, args.conf)
 
-    CONFIG = load_config(args.conf)
+    config = load_config(args.conf)
+    sync(config)
 
-    while True:
-        if args.watch:
-            CONFIG = wait_for_change(args, CONFIG)
+    # while True: # for watcher
+    #     if args.watch:
+    #         config = wait_for_change(args, config)
 
-        sync(CONFIG)
+    #     sync(config)
 
-        if not args.watch:
-            break
+    #     if not args.watch:
+    #         break
+
+if __name__ == '__main__':
+    main()
