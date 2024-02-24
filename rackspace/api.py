@@ -1,3 +1,4 @@
+"""Module wrapping API interface"""
 from __future__ import annotations
 
 import base64
@@ -6,34 +7,76 @@ import hashlib
 import http.client
 import json
 import logging
-import requests
 import time
-import yaml
 
-from typing import Optional, Tuple, Callable
+from typing import Optional, Tuple, Callable, Any, Union, TypeVar
+
+import requests
 
 from colorama import Fore, Style
 
+SelfApi = TypeVar("SelfApi", bound="Api")
+
 API_URL: str = 'https://api.emailsrvr.com'
-RATE_LIMIT_WAIT = 5
+RATE_LIMIT_WAIT: int = 5
 
 # Note: Rackspace returns "403 Forbidden" for rate limit responses,
 # instead of the correct "429 Too Many Requests".
 # As they publish what the limits are, I just wrap the request
 # calls with the rate_limit decorator to pre-throttle the calls
 # and prevent the 403.
-def rate_limit(rate: int =90, _id: str =None):
-    def outer_wrapper(func, _id=_id):
+def rate_limit( # pylint: disable=unused-argument
+        rate: int =90,
+        _id: Optional[str] =None) -> Callable:
+    """
+    Wrapper to handle RackSpace rate limits
+
+    Args:
+        rate (int, optional): Calls per minute. Defaults to 90.
+        _id (Optional[str], optional): HTTP Verb being called. Defaults to None.
+
+    Returns:
+        Callable: It's a decorator
+    """
+    # pylint: disable=line-too-long
+    def outer_wrapper(
+            func: Callable[..., Any],
+            _id: Union[str, None]=_id) -> Callable:
+        """
+        rate_limit decorator outer wrapper
+
+        Args:
+            func (Callable[..., Any]): HTTP Verb being wrapped
+            _id (Union[str, None], optional): Name of verb being wrapped. Defaults to _id.
+
+        Returns:
+            Callable: It's a docorator wrapper
+        """
         if _id is None:
             _id = func.__name__
 
-        def inner_wrapper(*pargs, **kwargs):
+        def inner_wrapper(
+                *pargs: Optional[Any],
+                **kwargs: Optional[dict]) -> requests.Response:
+            """
+            rate_limit decorator inner wrapper, the actual worker
+
+            Args:
+                *pargs (Any, optional): Positional args for HTTP verb
+                **kwargs (Any, optional): Keyword args for HTTP verb
+
+            Returns:
+                requests.Response: HTTP Verb request's response
+            """
             while True:
                 response = func(*pargs, **kwargs)
 
                 # Catch rate limit and repeat request
                 if response.status_code == 403 and response.text:
                     msg = response.json()
+                    if 'unauthorizedFault' not in msg:
+                        break
+
                     if 'unauthorizedFault' in msg and msg['unauthorizedFault'].get('message', '') == 'Exceeded request limits':
                         print(f'- ERROR: Rate Limit exceeded, sleeping {RATE_LIMIT_WAIT}, then retry')
                         time.sleep(RATE_LIMIT_WAIT)
@@ -47,48 +90,52 @@ def rate_limit(rate: int =90, _id: str =None):
     return outer_wrapper
 
 
-class Api(object):
+class Api(): # pylint: disable=too-many-instance-attributes
     """Api object with all knowledge for API calls to Rackspace
 
     Attributes:
-       customer (int): Rackspace customer #
-       domain (str): Rackspace domain
+        customer (int): Rackspace customer #
+        domain (str): Rackspace domain
     """
     def __repr__(self):
-        return f'{self.__class__.__name__}(user_key={self.user_key!r}, secret_key={self.secret_key!r}, customer_id={self.customer!r}, domain={self.domain!r})'
+        return (
+            f'{self.__class__.__name__}('
+            f'user_key={self.user_key!r}, '
+            f'secret_key={self.secret_key!r}, '
+            f'customer_id={self.customer!r}, '
+            f'domain={self.domain!r})')
 
-    def __init__(self,
+    def __init__( # pylint: disable=too-many-arguments,unused-argument
+            self,
             user_key: str,
             secret_key: str,
-            customer_id: str = None,
-            api_url: str = API_URL,
-            time_stamp: str = None,
-            user_agent: str = None,
-            domain: str = None,
-            *pargs,
-            **kwargs
-            ) -> None:
+            *pargs: Optional[Any],
+            customer_id: Optional[str] = None,
+            api_url: Optional[str] = API_URL,
+            time_stamp: Optional[str] = None,
+            user_agent: Optional[str] = None,
+            domain: Optional[str] = None,
+            **kwargs: Optional[dict]
+            ) -> SelfApi:
+        # pylint: disable=pointless-statement,line-too-long
         f"""Create an Api object
 
         Instantiate an object of Api
 
         Args:
-           user_key (str): Rackspace API User Key
-           secret_key (str): Rackspace API Secret Key
-           customer_id (int, optional): Rackspace Customer #
-           domain (str, optional): Rackspace domain
-           api_url (str, optional): Rackspace API URL defaults {API_URL}
-           time_stamp (str, optional): Time Stamp used for API Token, defaults to `datetime.now`
-           user_agent (str, optional): Web User Agent to report for API calls, defaults to `requests` standard UA
+            user_key (str): Rackspace API User Key
+            secret_key (str): Rackspace API Secret Key
+            customer_id (int, optional): Rackspace Customer #
+            domain (str, optional): Rackspace domain
+            api_url (str, optional): Rackspace API URL defaults {API_URL}
+            time_stamp (str, optional): Time Stamp used for API Token, defaults to `datetime.now`
+            user_agent (str, optional): Web User Agent to report for API calls, defaults to `requests` standard UA
 
         Returns:
-           None
-
-        Raises:
-           None
+            None
 
         Example:
-           api = Api('eGbq9/2hcZsRlr1JV1Pi', 'QHOvchm/40czXhJ1OxfxK7jDHr3t', time_stamp=20010317143725, user_agent='Rackspace Management Interface')
+            api = Api('eGbq9/2hcZsRlr1JV1Pi', 'QHOvchm/40czXhJ1OxfxK7jDHr3t', time_stamp=20010317143725, user_agent='Rackspace Management Interface')
         """
         headers = requests.utils.default_headers()
 
@@ -107,7 +154,7 @@ class Api(object):
         headers.update({'Accept': 'application/json'})
 
         if time_stamp is None:
-            time_stamp = '{:%Y%m%d%H%M%S}'.format(datetime.datetime.now())
+            time_stamp = f'{datetime.datetime.now():%Y%m%d%H%M%S}'
 
         self.headers: dict = headers
         self.time_stamp: str = time_stamp
@@ -120,80 +167,103 @@ class Api(object):
         self.auth_token: Optional[str] = None
 
     @property
-    def customer(self) -> str:
+    def customer(self) -> Optional[str]:
+        """Get current customer value
+
+        Returns:
+            str, optional: Customer #, if set, otherwise None
+        """
         try:
             return self.__customer
         except AttributeError:
             return None
     @customer.setter
-    def customer(self, value: str) -> None:
+    def customer(
+            self,
+            value: str) -> None:
+        """Set customer value
+
+        Args:
+            value (str): Customer #, as string, to set
+
+        Returns:
+            None
+        """
         self.__customer=value
 
     @property
     def domain(self) -> str:
+        """
+        Get current domain name
+
+        Returns:
+            str, optional: Domain name, if set, otherwise None
+        """
         try:
             return self.__domain
         except AttributeError:
             return None
     @domain.setter
-    def domain(self, value: str) -> None:
+    def domain(
+            self,
+            value: str) -> None:
+        """
+        Set domain name
+
+        Args:
+            value (str): Domain name to set
+        """
         self.__domain=value
 
-    def set_domain(self, domain: str) -> None:
+    def set_domain(
+            self,
+            domain: str) -> None:
         """Sets API domain
 
         Args:
-           domain (str): Domain to make requests for
-
-        Returns:
-           None
-
-        Raises:
-           None
+            domain (str): Domain to make requests for
         """
         self.__domain = domain
 
-    def gen_auth(self, new: bool =False, time_stamp: str =None) -> str:
+    def gen_auth(
+            self,
+            new: Optional[bool] =False,
+            time_stamp: Optional[str] =None) -> str:
         """Generate auth token for API calls
 
         Returns cached auth token, or generate a new token
 
         Args:
-           new (bool): True to force a new auth token
-           time_stamp (str, optional): Time stamp to use for auth token ('YYYYmmddHHMMSS' format)
+            new (bool, optional): True to force a new auth token.  Defaults to False
+            time_stamp (str, optional): Time stamp to use for auth token ('YYYYmmddHHMMSS' format)
 
         Returns:
-           str: Authentication token
+            str: Authentication token
 
         Raises:
-           None
+            None
         """
         if time_stamp is not None:
             self.time_stamp = time_stamp
-            self._genTokenSha()
+            self.__gen_token_sha()
 
         elif new:
-            self.time_stamp = '{:%Y%m%d%H%M%S}'.format(datetime.datetime.now())
-            self._genTokenSha()
+            self.time_stamp = f'{datetime.datetime.now():%Y%m%d%H%M%S}'
+            self.__gen_token_sha()
 
         elif self.token_sha is None:
-            self._genTokenSha()
+            self.__gen_token_sha()
 
         token = f'{self.user_key}:{self.time_stamp}:{self.token_sha}'
         self.headers.update({'X-Api-Signature': token})
 
         return token
 
-    def _genTokenSha(self) -> str:
+    def __gen_token_sha(self) -> str:
         """Generate the Auth Token SHA hash
 
-        Args:
-
         Returns:
-           str: Auth Token SHA hash
-
-        Raises:
-           None
+            str: Auth Token SHA hash
         """
         base_str = f'{self.user_key}{self.user_agent}{self.time_stamp}{self.secret_key}'
 
@@ -206,19 +276,19 @@ class Api(object):
         return self.token_sha
 
     @staticmethod
-    def _params(*pargs, **kwargs) -> Tuple[dict, str]:
+    def _params( # pylint: disable=unused-argument
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> Tuple[dict, str]:
         """Create a shallow copy of kwargs
 
         Creates a shallow copy of kwargs and data for debug
 
-        Args:
-
         Returns:
-           dict: shallow copy of `**kwargs`
-           str: URL args string (for debug output)
+            dict: shallow copy of `**kwargs`
+            str: URL args string (for debug output)
 
         Raises:
-           None
+            None
         """
         args = ''
         params = {}
@@ -234,91 +304,90 @@ class Api(object):
 
         Returns the API HTTP headers for a call
 
-        Args:
-
         Returns:
-           dict: HTTP Headers
-
-        Raises:
-           None
+            dict: HTTP Headers
         """
         self.gen_auth()
 
         return self.headers
 
     @rate_limit(120)
-    def get(self, *pargs, **kwargs) -> requests.Response:
+    def get(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> requests.Response:
         """API: `get` data from the rackspace API
 
         Requests data from the Rackspace API, ensuring we don't exceed our `get` rate limit
 
         Args:
-           path (str): API path to request
+            path (str): API path to request
 
         Returns:
-           requests.Response: Response for the GET call
-
-        Raises:
-           None
+            requests.Response: Response for the GET call
         """
         return self.__send(requests.get, *pargs, **kwargs)
 
     @rate_limit(90, 'send')
-    def put(self, *pargs, **kwargs) -> requests.Response:
+    def put(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> requests.Response:
         """API: Update `put` resouce in Rackspace API
 
         Updates the data of a resouce in the Rackspace API, ensuring we don't exceed
         our `send` rate limit
 
         NOTES:
-           See `__send()`
-
-        Args:
+            See `__send()`
 
         Returns:
-           requests.Response: Response for the PUT call
-
-        Raises:
-           None
+            requests.Response: Response for the PUT call
         """
         return self.__send(requests.put, *pargs, **kwargs)
 
     @rate_limit(90, 'send')
-    def post(self, *pargs, **kwargs) -> requests.Response:
+    def post(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> requests.Response:
         """API: Create `post` a resouce in Rackspace API
 
         Creates a new resouce in the Rackspace API, ensuring we don't exceed
         our `send` rate limit
 
         NOTES:
-           See `__send()`
-
-        Args:
+            See `__send()`
 
         Returns:
-           requests.Response: Response for the POST call
-
-        Raises:
-           None
+            requests.Response: Response for the POST call
         """
+        print(json.dumps(pargs, indent=4))
+        print(json.dumps(kwargs, sort_keys=True, indent=4))
         return self.__send(requests.post, *pargs, **kwargs)
 
-    def __send(self, func: Callable, path: str, data: dict =None, *pargs, **kwargs) -> requests.Response:
+    def __send( # pylint: disable=keyword-arg-before-vararg
+            self,
+            func: Callable,
+            path: str,
+            data: dict =None,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> requests.Response:
+        # pylint: disable=invalid-name,line-too-long
         """API: Private method for `get`, `put`, `post`, and `delete`
 
         Private method to do the work of `get`, `put`, `post`, and `delete`, as they are basically identical
         in how they are called
 
         Args:
-           func (function): `request.put` or `request.post` function
-           path (str): API path for this request
-           data (dict) Data to be sent to the API
+            func (function): `request.put` or `request.post` function
+            path (str): API path for this request
+            *pargs (Any, optional): Optional positional args for verbs
+            data (dict) Data to be sent to the API
+            **kwargs (dict, optional): Optional keyword args for verbs
 
         Returns:
-           requests.Response: Response for the `put`/`post` call
-
-        Raises:
-           None
+            requests.Response: Response for the `put`/`post` call
         """
         URL = self._url(path)
 
@@ -327,173 +396,182 @@ class Api(object):
         color = ''
         if fname == 'GET':
             color = Fore.GREEN
+
         elif fname == 'PUT':
             color = Fore.YELLOW
+
         elif fname == 'POST':
             color = Fore.YELLOW
+
         elif fname == 'DELETE':
             color = Fore.RED
+
         fname = f'{color}{fname}{Style.RESET_ALL}'
 
-        print('{} {}'.format(fname, ''.join((URL,args))))
-
+        print(f"{fname} {''.join((URL, args))}")
         return func(URL, data=data, headers=self._headers(), params=params)
 
     @rate_limit(90, 'send')
-    def delete(self, *pargs, **kwargs) -> requests.Response:
+    def delete(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> Union[requests.Response, None]:
         """API: Delete resource from Rackspace
 
         Delete the resource from the Rackspace API, ensuring we do not exceed
         our `send` rate limit
 
         NOTES:
-           See `__send()`
+            See `__send()`
 
         Args:
+            *pargs (Any, optional): Optional positional args for verbs
+            **kwargs (dict, optional): Optional keyword args for verbs
 
         Returns:
-           requests.Response: Response for the DELETE call
-
-        Raises:
-           None
+            requests.Response: Response for the DELETE call
         """
-        while input(f"\n{pargs[0]}\nAre you sure you wish to delete (Yes/No)? ").lower() in ('y', 'yes'):
-          return self.__send(requests.delete, *pargs, **kwargs)
-          break
-        else:
-          return None
+        prompt = f"\n{pargs[0]}\nAre you sure you wish to delete (Yes/No)? "
+        while input(prompt).lower() in ('y', 'yes'):
+            return self.__send(requests.delete, *pargs, **kwargs)
 
-    def _url(self, path: str) -> str:
+        return None
+
+    def _url(
+            self,
+            path: str) -> str:
         """Construct the full URL for an API call
 
         The `path` will be appended to the API url
 
         Args:
-           path (str): API path for this request
+            path (str): API path for this request
 
         Returns:
-           str: Full URL for the API call
-
-        Raises:
-           None
+            str: Full URL for the API call
         """
         return f'{self.api_url}{path}'
 
-    def _customer_path(self, ver: int =1) -> str:
+    def _customer_path(
+            self,
+            ver: int =1) -> str:
         """Construct the path for customer root path
 
         Args:
-           ver (int, optional): API Version, defaults to 1
+            ver (int, optional): API Version, defaults to 1
 
         Returns:
-           str: Customer API path
-
-        Raises:
-           None
+            str: Customer API path
         """
         return f'/v{ver}/customers/{self.customer}'
 
-    def _domain_path(self, *pargs, **kwargs) -> str:
+    def _domain_path(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> str:
         """Construct the path for the domain root path
 
         NOTES:
-           See `_customer_path()`
+            See `_customer_path()`
 
         Args:
+            *pargs (Any, optional): Optional positional args for path construction chaining
+            **kwargs (dict, optional): Optional keyword args for path construction chaining
 
         Returns:
-           str: Domain API path
-
-        Raises:
-           None
+            str: Domain API path
         """
         root = self._customer_path(*pargs, **kwargs)
         return f'{root}/domains/{self.domain}'
 
-    def _accounts_path(self, *pargs, **kwargs) -> str:
+    def _accounts_path(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> str:
         """Construct the path for the accounts root path
 
         NOTES:
-           See `_domain_path()`
+            See `_domain_path()`
 
         Args:
+            *pargs (Any, optional): Optional positional args for path construction chaining
+            **kwargs (dict, optional): Optional keyword args for path construction chaining
 
         Returns:
-           str: Accounts API path
-
-        Raises:
-           None
+            str: Accounts API path
         """
         root = self._domain_path(*pargs, **kwargs)
         return f'{root}/rs/mailboxes'
 
-    def _account_path(self, account: str, *pargs, **kwargs) -> str:
+    def _account_path(
+            self,
+            account: str,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> str:
         """Construct the path for an account root path
 
         NOTES:
-           See `_accounts_path()`
+            See `_accounts_path()`
 
         Args:
-           account (str): Account name for the request
+            account (str): Account name for the request
+            *pargs (Any, optional): Optional positional args for path construction chaining
+            **kwargs (dict, optional): Optional keyword args for path construction chaining
 
         Returns:
-           str: Account API path
-
-        Raises:
-           None
+            str: Account API path
         """
         root = self._accounts_path(*pargs, **kwargs)
         return f'{root}/{account}'
 
-    def _aliases_path(self, *pargs, **kwargs) -> str:
+    def _aliases_path(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> str:
         """Construct the path for aliases root path
 
         NOTE:
-           See `_domain_path()`
+            See `_domain_path()`
 
         Args:
+            *pargs (Any, optional): Optional positional args for path construction chaining
+            **kwargs (dict, optional): Optional keyword args for path construction chaining
 
         Returns:
-           str: Aliases API path
-
-        Raises:
-           None
+            str: Aliases API path
         """
         root = self._domain_path(*pargs, **kwargs)
         return f'{root}/rs/aliases'
 
-    def _alias_path(self, alias: str, *pargs, **kwargs) -> str:
+    def _alias_path(
+            self,
+            alias: str,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> str:
         """Construct the path for an alias root path
 
         NOTE:
-           See `_aliases_path()`
+            See `_aliases_path()`
 
         Args:
-           alias (str): Name of alias for call
+            alias (str): Name of alias for call
+            *pargs (Any, optional): Optional positional args for path construction chaining
+            **kwargs (dict, optional): Optional keyword args for path construction chaining
 
         Returns:
-           str: Alias API path
-
-        Raises:
-           None
+            str: Alias API path
         """
         root = self._aliases_path(*pargs, **kwargs)
         return f'{root}/{alias}'
 
     @staticmethod
-    def httpclient_logging_unpatch(level: int =logging.DEBUG) -> None:
+    def httpclient_logging_unpatch(level: Optional[int] =logging.DEBUG) -> None:
         """Patch http.client to disable logging
 
         Ugly patch to http.client to disable logging queries and headers/data
 
         Args:
-           level (int, optional): Logging level, default to `logging.DEBUG`
-
-        Returns:
-           None
-
-        Raises:
-           None
+            level (int, optional): Logging level, default to `logging.DEBUG`
         """
         logging.disable(level)
 
@@ -501,19 +579,13 @@ class Api(object):
         http.client.HTTPConnection.debuglevel = 0 # type: ignore
 
     @staticmethod
-    def httpclient_logging_patch(level: int =logging.DEBUG) -> None:
+    def httpclient_logging_patch(level: Optional[int] =logging.DEBUG) -> None:
         """Patch http.client to log queries
 
         Ugly patch to http.client to force it to log queries and headers/data
 
         Args:
-           level (int, optional): Logging level, default to `logging.DEBUG`
-
-        Returns:
-           None
-
-        Raises:
-           None
+            level (int, optional): Logging level, default to `logging.DEBUG`
         """
         logging.basicConfig(level=level)
         httpclient_logger = logging.getLogger('http.client')
@@ -526,21 +598,25 @@ class Api(object):
         http.client.HTTPConnection.debuglevel = 1 # type: ignore
 
     @staticmethod
-    def _success(response: requests.Response, status_code: int =200, output: bool =True) -> bool:
+    def _success(
+            response: requests.Response,
+            status_code: Optional[int] =200,
+            output: Optional[bool] =True) -> bool:
         """Check response for "success"
 
         Checks the response object for "success", normally status_code 200
         Dumps the message on "failure"
 
         Args:
-           response (requests.Response): response object to test
-           status_code (int, optional): Status code considered "success", default 200
+            response (requests.Response): response object to test
+            status_code (int, optional): Status code considered "success", default 200
+            output (bool, optional: Flag to print response or not)
 
         Returns:
-           bool: True if response status code matches expected code
+            bool: True if response status code matches expected code
 
         Raises:
-           None
+            None
         """
         try:
             if response.status_code != status_code:
