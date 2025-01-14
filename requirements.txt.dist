@@ -13,7 +13,6 @@ isort==5.13.2
 lazy-object-proxy==1.10.0
 mccabe==0.7.0
 pipreqs==0.4.13
-pkg_resources==0.0.0
 protobuf==4.25.2
 pylint==3.0.3
 PyYAML==6.0.1

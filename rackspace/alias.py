@@ -1,10 +1,14 @@
+"""Handle Rackspace Aliases"""
 from __future__ import annotations
 
 import json
 
-from typing import List, Optional
+from typing import List, Optional, Any, TypeVar
 
 from .api import Api
+
+SelfAlias = TypeVar('SelfAlias', bound='Alias')
+SelfAliases = TypeVar('SelfAliases', bound='Aliases')
 
 DEBUG: bool = False
 PAGE_SIZE: int = 50
@@ -18,26 +22,30 @@ PAGE_SIZE: int = 50
 # the destination addresses needed to construct an Alias() object
 
 class DuplicateLoadError(Exception):
-    pass
+    """Repeated Load Error"""
+    pass # pylint: disable=unnecessary-pass
 
 
 class RetrieveLimit(Exception):
-    pass
+    """Exceeded Retrieval Limit"""
+    pass # pylint: disable=unnecessary-pass
 
 
-class Alias(object):
+class Alias():
     """Alias object with all knowledge for a single alias
 
     Attributes:
        name (str): Name of alias, without domain
        data (:list:`str`): List of email targets for alias
     """
-    def __init__(self,
-                 name: str,
-                 api: Api =None,
-                 debug: bool =DEBUG,
-                 response: Api.requests.Response =None,
-                 *pargs, **kwargs) -> None:
+    def __init__( # pylint: disable=keyword-arg-before-vararg
+            self,
+            name: str,
+            api: Api =None,
+            debug: bool =DEBUG,
+            response: Api.requests.Response =None,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> SelfAlias:
         self.name: str = name.split('@')[0]
         self.data: List[str] = []
         self.loaded: bool = False
@@ -50,27 +58,46 @@ class Alias(object):
         self.__load(*pargs, **kwargs)
 
     def __str__(self) -> str:
+        """Custom str() format"""
         return f'''Alias({{name: "{self.name}", data: ["{'", "'.join(self.data)}"]}})'''
 
     def __repr__(self) -> str:
+        """Custom repr() format"""
         return self.__str__()
 
     @property
-    def success(self):
+    def success(self) -> bool:
+        """
+        Check success of request response
+
+        Returns:
+            bool: response success
+        """
+        # pylint: disable=protected-access,bare-except
         try:
             return self.api._success(self.response, output=False)
         except:
             return False
 
     @property
-    def canRecover(self):
+    def canRecover(self) -> bool: # pylint: disable=invalid-name
+        """
+        Check if a failed call can be recovered
+
+        Returns:
+            bool: Can failed call recover
+        """
         return False
 
-
-    def save(self):
+    def save(self) -> None:
+        """
+        Save (print) this alias data
+        """
         print(json.dumps(self.data))
 
-    def load(self, data: dict =None) -> None:
+    def load(
+            self,
+            data: Optional[dict] =None) -> None:
         """Load data into Alias object
 
         Loads data, specified in the 'data' argument, into the Alias object
@@ -79,15 +106,16 @@ class Alias(object):
            data (dict): Alias data to be loaded into Alias object,
                         usually from the Rackspace API
 
-        Returns:
-           None
-
         Raises:
            DuplicateLoadError: If Alias object already has data loaded
         """
         self.__load(data=data)
 
-    def __load(self, data: dict = None, name: str =None, address: str = None) -> None:
+    def __load( # pylint: disable=unused-argument
+            self,
+            data: Optional[dict] = None,
+            name: Optional[str] =None,
+            address: Optional[str] = None) -> None:
         """Private data load method
 
         Private method to load data into Alias object.  Tries to determine if it
@@ -98,9 +126,6 @@ class Alias(object):
                                   usually from the Rackspace API
            name (str):            Name of the alias
            address (str or list): Address(es) the alias points to
-
-        Returns:
-           None
 
         Raises:
            DuplicateLoadError: If Alias object already has data loaded
@@ -121,21 +146,23 @@ class Alias(object):
         if data is None:
             return
 
-        if all(key in data for key in ('numberOfMembers', 'singleMemberName')) and data['numberOfMembers'] == 1:
+        if all(key in data for key in ('numberOfMembers', 'singleMemberName')) and data['numberOfMembers'] == 1: # pylint: disable=line-too-long
             self.data = [ data['singleMemberName'] ]
 
-        elif all(key in data for key in ('emailAddressList',)) and 'emailAddress' in data['emailAddressList']:
+        elif all(key in data for key in ('emailAddressList',)) and 'emailAddress' in data['emailAddressList']: # pylint: disable=line-too-long
             self.data = data['emailAddressList']['emailAddress']
 
         elif isinstance(data, list):
             self.data = data
 
         else:
-            raise Exception(f'Should never be here {data}')
+            raise Exception(f'Should never be here {data}') # pylint: disable=broad-exception-raised
 
         self.loaded = True
 
-    def add_address(self, address: str) -> None:
+    def add_address(
+            self,
+            address: str) -> None:
         """Add new address to alias
 
         Adds a new address to self.  Only affects the object, and
@@ -143,17 +170,13 @@ class Alias(object):
 
         Args:
            address (str): FQDN email address to add to the alias
-
-        Returns:
-           None
-
-        Raises:
-           None
         """
         if address not in self.data:
             self.data.append(address)
 
-    def diff(self, other_alias: Alias) -> dict:
+    def diff(
+            self,
+            other_alias: Alias) -> dict:
         """Compares two Alias objects
 
         Compares this (self) Alias object to another Alias object and
@@ -168,9 +191,6 @@ class Alias(object):
            dict: 'add'     -> list of addresses that are not in other_alias
                  'del'     -> list of addresses that are not in self
                  'changes' -> total 'add' plus 'del' addresses that were found
-
-        Raises:
-           None
         """
         # Since the only content of an alias is a list of target addresses
         # we need to return what is new, to add
@@ -185,54 +205,61 @@ class Alias(object):
 
         return diff
 
-    def get(self, *pargs, **kwargs) -> Optional[Alias]:
+    def get(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> Optional[Alias]:
         """API: Get the alias data from rackspace
 
         Calls the rackspace API to retrieve target
         addresses for alias.
 
         Args:
+            *pargs (Any, optional): position args to pass to API Get call
+            **kwargs (dict, optional): keyword args to pass to API Get call
 
         Returns:
            Alias: on success, a NEW Alias object, created from rackspace data
                   else, None
-
-        Raises:
-           None
         """
-        path = f'{self.api._alias_path(self.name)}'
+        path = f'{self.api._alias_path(self.name)}' # pylint: disable=protected-access
         response = self.api.get(path, *pargs, **kwargs)
 
-        if not self.api._success(response):
+        if not self.api._success(response): # pylint: disable=protected-access
             return Alias(self.name, api=self.api, data=self.data, response=response)
 
         return Alias(self.name, api=self.api, data=response.json(), response=response)
 
-    def add(self, *pargs: list, **kwargs: dict) -> bool:
+    def add(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> bool:
         """API: Add rackspace alias with addresses
 
         Adds the alias to rackspace with addresses from self
 
         Args:
+            *pargs (Any, optional): position args to pass to API Post call
+            **kwargs (dict, optional): keyword args to pass to API Post call
 
         Returns:
            bool: True on success
-
-        Raises:
-           None
         """
-        path = f'{self.api._alias_path(self.name)}'
+        path = f'{self.api._alias_path(self.name)}' # pylint: disable=protected-access
 
         data = {'aliasEmails': ','.join(self.data)}
 
         if self.debug:
             print(f"\n{path}\n   ALIAS ADD: {{'{self.name}' => {self.data}}}")
             return True
-        else:
-            response = self.api.post(path, data, *pargs, **kwargs)
-            return self.api._success(response)
 
-    def replace(self, *pargs, **kwargs) -> bool:
+        response = self.api.post(path, data, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
+
+    def replace(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> bool:
         """API: Replace rackspace data with new addresses
 
         Completely replaces the rackspace alias addresses with
@@ -240,48 +267,53 @@ class Alias(object):
         after call.
 
         Args:
+            *pargs (Any, optional): position args to pass to API Put call
+            **kwargs (dict, optional): keyword args to pass to API Put call
 
         Returns:
            bool: True on success
-
-        Raises:
-           None
         """
-        path = f'{self.api._alias_path(self.name)}'
+        path = f'{self.api._alias_path(self.name)}' # pylint: disable=protected-access
 
         data = {'aliasEmails': ','.join(self.data)}
 
         if self.debug:
             print(f"\n{path}\n   ALIAS REPLACE: {{'{self.name}' => {self.data}}}")
             return True
-        else:
-            response = self.api.put(path, data, *pargs, **kwargs)
-            return self.api._success(response)
+
+        response = self.api.put(path, data, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
 
 
-    def remove(self, *pargs: list, **kwargs: dict) -> bool:
+    def remove(
+            self,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> bool:
         """API: Remove the alias from rackspace
 
         Removes the alias from rackspace
 
         Args:
+            *pargs (Any, optional): position args to pass to API Delete call
+            **kwargs (dict, optional): keyword args to pass to API Delete call
 
         Returns:
            bool: True on success
-
-        Raises:
-           None
         """
-        path = f'{self.api._alias_path(self.name)}'
+        path = f'{self.api._alias_path(self.name)}' # pylint: disable=protected-access
 
         if self.debug:
             print(f"\n{path}\n   ALIAS REMOVE: '{self.name}'")
             return True
-        else:
-            response = self.api.delete(path, *pargs, **kwargs)
-            return self.api._success(response)
 
-    def update(self, data: dict, *pargs: list, **kwargs: dict) -> bool:
+        response = self.api.delete(path, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
+
+    def update(
+            self,
+            data: dict,
+            *pargs: Optional[list[Any]],
+            **kwargs: Optional[dict]) -> bool:
         """API: Update the rackspace alias
 
         Updates the rackspace alias by adding, or removing, a single address.
@@ -290,18 +322,15 @@ class Alias(object):
         use `.replace()` instead to reduce the number of API calls.
 
         Args:
-           address (str): Address to add/remove from alias
-           add (bool):    Add address (takes precidence if both 'add' and 'remove' are True)
-           remove (bool): Remove address
+            data (dict): Change detection dictionary
+            *pargs (Any, optional): position args to pass to API Post call
+            **kwargs (dict, optional): keyword args to pass to API Post call
 
         Returns:
            bool: True on success
-
-        Raises:
-           None
         """
 
-        path = f'{self.api._alias_path(self.name)}'
+        path = f'{self.api._alias_path(self.name)}' # pylint: disable=protected-access
 
         api_data = {}
         if data['changes'] > 1:
@@ -322,26 +351,40 @@ class Alias(object):
 
         else:
             print(f"ERROR: {path}")
-            raise Exception('Should not be here')
+            raise Exception('Should not be here') # pylint: disable=broad-exception-raised
 
         if self.debug:
             print(f"\n{path}\n   ALIAS UPDATE: {self.name} => {debug_data}")
             return True
 
-        else:
-            response = func(path, data=api_data, *pargs, **kwargs)
-            return self.api._success(response)
+        response = func(path, data=api_data, *pargs, **kwargs)
+        return self.api._success(response) # pylint: disable=protected-access
 
 
-class Aliases(object):
-    def __init__(self, api: Api, debug: bool =DEBUG) -> None:
+class Aliases(): # pylint: disable=too-few-public-methods
+    """
+    Aliases object to load all aliases
+    
+    Attributes
+        api (Api): The Api object to use
+        debug (bool, optional: Debug Flag)
+    """
+    def __init__(
+            self,
+            api: Api,
+            debug: bool =DEBUG) -> Aliases:
+
         self.api = api
         self.debug = debug
 
         # Ensure api is ready to make connections
         self.api.gen_auth()
 
-    def get(self, limit=None, *pargs: list, **kwargs: dict) -> dict:
+    def get( # pylint: disable=keyword-arg-before-vararg
+            self,
+            limit=None,
+            *pargs: Optional[Any],
+            **kwargs: Optional[dict]) -> dict:
         """API: Get list of aliases
 
         Get a list of all aliases, instantiating Alias objects for them
@@ -353,15 +396,13 @@ class Aliases(object):
 
         Returns:
            dict: {`name`: Alias()} list of aliases
-
-        Raises:
-           None
         """
         aliases: dict = {}
 
-        path = f'{self.api._aliases_path()}/'
+        path = f'{self.api._aliases_path()}/' # pylint: disable=protected-access
 
         while True:
+            # pylint: disable=duplicate-code
             response = self.api.get(path, *pargs, **kwargs)
             assert response.status_code == 200 and response.text
             data = response.json()
@@ -401,4 +442,3 @@ class Aliases(object):
             kwargs['offset'] = data['offset'] + data['size']
 
         return aliases
-

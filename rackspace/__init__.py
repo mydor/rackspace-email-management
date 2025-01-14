@@ -1,3 +1,4 @@
+"""RackSpace Api package"""
 from .api import Api
 from .account import Account, Accounts
 from .alias import Alias, Aliases

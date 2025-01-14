@@ -1,0 +1,18 @@
+wheel # MUST be BEFORE etcd3
+black
+chardet
+colorama
+dill
+dnspython>=2.6.1
+etcd3
+mypy
+pipdeptree
+pipreqs
+pylint
+tomlkit
+types-colorama
+types-PyYAML
+types-requests
+urllib3>=2
+wrapt
+yq
