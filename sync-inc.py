@@ -9,9 +9,10 @@ import json
 import os
 import pathlib
 import typing
-import yaml
 
 from typing import Optional, Union, Tuple
+
+import yaml
 
 from rackspace import spam, Api, Account, Alias
 
@@ -59,6 +60,13 @@ def init_obj(fname: str) -> InitObj:
         name = None
 
     API.domain = domain
+
+    obj: Union[
+        Account,
+        Alias,
+        spam.Settings,
+        spam.ACL
+    ]
 
     if obj_type == 'account':
         obj = Account(api=API, name=name)
