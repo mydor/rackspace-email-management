@@ -10,7 +10,7 @@ from .api import Api
 SelfAlias = TypeVar('SelfAlias', bound='Alias')
 SelfAliases = TypeVar('SelfAliases', bound='Aliases')
 
-DEBUG: bool = True
+DEBUG: bool = False
 PAGE_SIZE: int = 50
 
 #

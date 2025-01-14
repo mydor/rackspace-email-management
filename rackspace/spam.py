@@ -600,7 +600,7 @@ class Settings():
             'spam',
             'settings'
         ))
-        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/settings'
+        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/settings' # pylint: disable=line-too-long
 
         response = self.api.get(path, *pargs, **kwargs)
 
@@ -681,7 +681,7 @@ class Settings():
             'spam',
             'settings'
         ))
-        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/settings'
+        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/settings' # pylint: disable=line-too-long
 
         if override is None:
             override = self.override
@@ -817,7 +817,7 @@ class ACL():
             'spam',
             self.acl
         ))
-        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/{self.acl}'
+        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/{self.acl}' # pylint: disable=line-too-long
 
         response = self.api.get(path, *pargs, **kwargs)
 
@@ -904,7 +904,7 @@ class ACL():
             'spam',
             self.acl
         ))
-        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/{self.acl}'
+        # path = f'/v1/customers/{self.api.customer}/domains/{self.api.domain}/{account}/spam/{self.acl}' # pylint: disable=line-too-long
 
         if self.debug:
             print(f"\n{path}\n   SPAM SETTINGS ACL '{self.acl}': '{data}'")

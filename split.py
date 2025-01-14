@@ -13,15 +13,12 @@ import pathlib
 import typing
 import yaml
 
-CONFIG_FILE = 'conf.yml'
-CONFIG_DIR = 'conf.d'
-SYNC_DIR = 'tmp'
+CONFIG_FILE = "conf.yml"
+CONFIG_DIR = "conf.d"
+SYNC_DIR = "tmp"
 
-def store(
-        src: str,
-        address: str,
-        data: dict,
-        data_dir: str) -> None:
+
+def store(src: str, address: str, data: dict, data_dir: str) -> None:
     """
     Store a sync "object" as json to the sync directory
 
@@ -37,19 +34,21 @@ def store(
     if len(data) < 1:
         return
 
-    fname = f'{address}-{src}'
+    fname = f"{address}-{src}"
 
     target = os.path.join(data_dir, fname)
 
     json_data = json.dumps(data, sort_keys=True)
-    with open(f'{target}.json', 'wt', encoding='utf-8') as fout:
+    with open(f"{target}.json", "wt", encoding="utf-8") as fout:
         fout.write(json_data)
 
+
 def parse_spam(
-        domain: str,
-        tmp_config: dict,
-        args: argparse.Namespace,
-        account: typing.Optional[str] =None) -> None:
+    domain: str,
+    tmp_config: dict,
+    args: argparse.Namespace,
+    account: typing.Optional[str] = None,
+) -> None:
     """
     Parse and save Spam settings
 
@@ -64,19 +63,28 @@ def parse_spam(
     """
     config = copy.deepcopy(tmp_config)
     if account is None:
-        account=''
+        account = ""
 
-    for acl in ('blocklist', 'ipblocklist', 'safelist', 'ipsafelist'):
+    for acl in ("blocklist", "ipblocklist", "safelist", "ipsafelist"):
         if acl in config and len(config[acl]) > 0:
-            store(acl, f'{account}@{domain}', sorted(list(set(config[acl]))), data_dir=args.sync)
+            store(
+                acl,
+                f"{account}@{domain}",
+                sorted(list(set(config[acl]))),
+                data_dir=args.sync,
+            )
             config.pop(acl)
 
-    if 'settings' in config:
-        store('spam', f'{account}@{domain}', config['settings'], data_dir=args.sync)
+    if "settings" in config:
+        store(
+            "spam",
+            f"{account}@{domain}",
+            config["settings"],
+            data_dir=args.sync,
+        )
 
-def parse_aliases(
-        config: dict,
-        args: argparse.Namespace) -> None:
+
+def parse_aliases(config: dict, args: argparse.Namespace) -> None:
     """
     Parse and save aliases
 
@@ -88,14 +96,16 @@ def parse_aliases(
         None
     """
     for alias in config:
-        store('alias', alias, config[alias], data_dir=args.sync)
+        store("alias", alias, config[alias], data_dir=args.sync)
+
 
 def parse_account(
-        domain: str,
-        tmp_config: dict,
-        account: str,
-        aliases: dict,
-        args: argparse.Namespace) -> None:
+    domain: str,
+    tmp_config: dict,
+    account: str,
+    aliases: dict,
+    args: argparse.Namespace,
+) -> None:
     """
     Parse and save accounts
 
@@ -110,28 +120,28 @@ def parse_account(
         None
     """
     config = copy.deepcopy(tmp_config)
-    email = f'{account}@{domain}'
+    email = f"{account}@{domain}"
 
-    if 'spam' in config:
-        parse_spam(domain, config['spam'], args, account)
-        config.pop('spam')
+    if "spam" in config:
+        parse_spam(domain, config["spam"], args, account)
+        config.pop("spam")
 
-    if 'aliases' in config:
-        for alias in config['aliases']:
+    if "aliases" in config:
+        for alias in config["aliases"]:
             if alias not in aliases:
                 aliases[alias] = [email]
 
             else:
                 aliases[alias].append(email)
 
-        config.pop('aliases')
+        config.pop("aliases")
 
-    store('account', email, config, data_dir=args.sync)
+    store("account", email, config, data_dir=args.sync)
+
 
 def parse_accounts(
-        domain: str,
-        config: dict,
-        args: argparse.Namespace) -> None:
+    domain: str, config: dict, args: argparse.Namespace
+) -> None:
     """
     Parse configured accounts
 
@@ -151,10 +161,8 @@ def parse_accounts(
 
     parse_aliases(aliases, args)
 
-def parse_config(
-        fname: str,
-        domain: str,
-        args: argparse.Namespace) -> None:
+
+def parse_config(fname: str, domain: str, args: argparse.Namespace) -> None:
     """
     Load and parse a config file
 
@@ -166,16 +174,17 @@ def parse_config(
     Returns:
         None
     """
-    with open(fname, 'rt', encoding='utf-8') as fin:
+    with open(fname, "rt", encoding="utf-8") as fin:
         raw = fin.read()
     data = yaml.safe_load(raw)
 
     for key, val in data.items():
-        if key == 'spam':
+        if key == "spam":
             parse_spam(domain, val, args)
 
-        elif key == 'accounts':
+        elif key == "accounts":
             parse_accounts(domain, val, args)
+
 
 # def cleandir_md5(path: str) -> None:
 #     """
@@ -194,6 +203,7 @@ def parse_config(
 
 #         os.unlink(fname)
 
+
 def cleandir_json(path: str) -> None:
     """
     Remove json files in <path>
@@ -204,7 +214,7 @@ def cleandir_json(path: str) -> None:
     Returns:
         None
     """
-    for fname in glob.glob(f'''{os.path.join(path, '*.json')}'''):
+    for fname in glob.glob(f"""{os.path.join(path, '*.json')}"""):
         os.unlink(fname)
 
 
@@ -212,21 +222,30 @@ def main() -> None:
     """Main entry point"""
     # pylint: disable=duplicate-code
     parser = argparse.ArgumentParser()
-    parser.add_argument('--conf', '-c',
-                        help="Config directory",
-                        type=pathlib.Path,
-                        metavar='<FILE>',
-                        default=CONFIG_FILE)
-    parser.add_argument('--data', '-d',
-                        help="Where supplemental config files are stored",
-                        type=pathlib.Path,
-                        metavar='<DIR>',
-                        default=CONFIG_DIR)
-    parser.add_argument('--sync', '-s',
-                        help="Where sync files are stored",
-                        type=pathlib.Path,
-                        metavar='<DIR>',
-                        default=SYNC_DIR)
+    parser.add_argument(
+        "--conf",
+        "-c",
+        help="Config directory",
+        type=pathlib.Path,
+        metavar="<FILE>",
+        default=CONFIG_FILE,
+    )
+    parser.add_argument(
+        "--data",
+        "-d",
+        help="Where supplemental config files are stored",
+        type=pathlib.Path,
+        metavar="<DIR>",
+        default=CONFIG_DIR,
+    )
+    parser.add_argument(
+        "--sync",
+        "-s",
+        help="Where sync files are stored",
+        type=pathlib.Path,
+        metavar="<DIR>",
+        default=SYNC_DIR,
+    )
     args = parser.parse_args()
 
     # Remove files before recreating them, keeps obsolete files from building up
@@ -234,18 +253,19 @@ def main() -> None:
     # but we need to clear .json to signify a mail object (account/alias/etc) was deleted
     cleandir_json(args.sync)
 
-    #conf.d
-    #[]
-    #['arch-mage.com.yml', 'domain.com.yml.dist',
+    # conf.d
+    # []
+    # ['arch-mage.com.yml', 'domain.com.yml.dist',
     # 'moonlightimagery.biz.yml', 'moonlightimagery.com.yml']
     for path, _, files in os.walk(args.data):
         for fname in files:
-            if not fname.endswith('.yml'):
+            if not fname.endswith(".yml"):
                 continue
             filepath = os.path.join(path, fname)
             (domain, _) = os.path.splitext(fname)
 
             parse_config(filepath, domain, args)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

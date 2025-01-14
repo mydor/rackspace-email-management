@@ -1,4 +1,5 @@
 """Module wrapping API interface"""
+
 from __future__ import annotations
 
 import base64
@@ -9,25 +10,27 @@ import json
 import logging
 import time
 
-from typing import Optional, Tuple, Callable, Any, Union, TypeVar
+from typing import Optional, Tuple, Callable, Any, Union, TypeVar, Dict
 
 import requests
 
 from colorama import Fore, Style
+from requests.structures import CaseInsensitiveDict
 
 SelfApi = TypeVar("SelfApi", bound="Api")
 
-API_URL: str = 'https://api.emailsrvr.com'
+API_URL: str = "https://api.emailsrvr.com"
 RATE_LIMIT_WAIT: int = 5
+
 
 # Note: Rackspace returns "403 Forbidden" for rate limit responses,
 # instead of the correct "429 Too Many Requests".
 # As they publish what the limits are, I just wrap the request
 # calls with the rate_limit decorator to pre-throttle the calls
 # and prevent the 403.
-def rate_limit( # pylint: disable=unused-argument
-        rate: int =90,
-        _id: Optional[str] =None) -> Callable:
+def rate_limit(  # pylint: disable=unused-argument
+    rate: int = 90, _id: Optional[str] = None
+) -> Callable:
     """
     Wrapper to handle RackSpace rate limits
 
@@ -38,10 +41,11 @@ def rate_limit( # pylint: disable=unused-argument
     Returns:
         Callable: It's a decorator
     """
+
     # pylint: disable=line-too-long
     def outer_wrapper(
-            func: Callable[..., Any],
-            _id: Union[str, None]=_id) -> Callable:
+        func: Callable[..., Any], _id: Union[str, None] = _id
+    ) -> Callable:
         """
         rate_limit decorator outer wrapper
 
@@ -56,8 +60,8 @@ def rate_limit( # pylint: disable=unused-argument
             _id = func.__name__
 
         def inner_wrapper(
-                *pargs: Optional[Any],
-                **kwargs: Optional[dict]) -> requests.Response:
+            *pargs: Optional[Any], **kwargs: Optional[dict]
+        ) -> requests.Response:
             """
             rate_limit decorator inner wrapper, the actual worker
 
@@ -72,13 +76,19 @@ def rate_limit( # pylint: disable=unused-argument
                 response = func(*pargs, **kwargs)
 
                 # Catch rate limit and repeat request
-                if response.status_code == 403 and response.text:
+                if response and response.status_code == 403 and response.text:
                     msg = response.json()
-                    if 'unauthorizedFault' not in msg:
+                    if "unauthorizedFault" not in msg:
                         break
 
-                    if 'unauthorizedFault' in msg and msg['unauthorizedFault'].get('message', '') == 'Exceeded request limits':
-                        print(f'- ERROR: Rate Limit exceeded, sleeping {RATE_LIMIT_WAIT}, then retry')
+                    if (
+                        "unauthorizedFault" in msg
+                        and msg["unauthorizedFault"].get("message", "")
+                        == "Exceeded request limits"
+                    ):
+                        print(
+                            f"- ERROR: Rate Limit exceeded, sleeping {RATE_LIMIT_WAIT}, then retry"
+                        )
                         time.sleep(RATE_LIMIT_WAIT)
                         continue
 
@@ -86,37 +96,41 @@ def rate_limit( # pylint: disable=unused-argument
                 break
 
             return response
+
         return inner_wrapper
+
     return outer_wrapper
 
 
-class Api(): # pylint: disable=too-many-instance-attributes
+class Api:  # pylint: disable=too-many-instance-attributes
     """Api object with all knowledge for API calls to Rackspace
 
     Attributes:
         customer (int): Rackspace customer #
         domain (str): Rackspace domain
     """
+
     def __repr__(self):
         return (
-            f'{self.__class__.__name__}('
-            f'user_key={self.user_key!r}, '
-            f'secret_key={self.secret_key!r}, '
-            f'customer_id={self.customer!r}, '
-            f'domain={self.domain!r})')
+            f"{self.__class__.__name__}("
+            f"user_key={self.user_key!r}, "
+            f"secret_key={self.secret_key!r}, "
+            f"customer_id={self.customer!r}, "
+            f"domain={self.domain!r})"
+        )
 
-    def __init__( # pylint: disable=too-many-arguments,unused-argument
-            self,
-            user_key: str,
-            secret_key: str,
-            *pargs: Optional[Any],
-            customer_id: Optional[str] = None,
-            api_url: Optional[str] = API_URL,
-            time_stamp: Optional[str] = None,
-            user_agent: Optional[str] = None,
-            domain: Optional[str] = None,
-            **kwargs: Optional[dict]
-            ) -> SelfApi:
+    def __init__(  # pylint: disable=too-many-arguments,unused-argument
+        self,
+        user_key: str,
+        secret_key: str,
+        *pargs: Optional[Any],
+        customer_id: Optional[str] = None,
+        api_url: Optional[str] = API_URL,
+        time_stamp: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        domain: Optional[str] = None,
+        **kwargs: Optional[dict],
+    ) -> None:
         # pylint: disable=pointless-statement,line-too-long
         f"""Create an Api object
 
@@ -146,22 +160,24 @@ class Api(): # pylint: disable=too-many-instance-attributes
             self.domain = domain
 
         if user_agent is None:
-            user_agent = headers.get('User-Agent')
+            user_agent = headers.get("User-Agent")
 
         else:
-            headers.update({'User-Agent': user_agent})
+            headers.update({"User-Agent": user_agent})
 
-        headers.update({'Accept': 'application/json'})
+        headers.update({"Accept": "application/json"})
 
         if time_stamp is None:
-            time_stamp = f'{datetime.datetime.now():%Y%m%d%H%M%S}'
+            time_stamp = f"{datetime.datetime.now():%Y%m%d%H%M%S}"
 
-        self.headers: dict = headers
-        self.time_stamp: str = time_stamp
+        self.headers: CaseInsensitiveDict[str] = (
+            headers  # pylint: disable=unsubscriptable-object
+        )
+        self.time_stamp: Optional[str] = time_stamp
         self.user_key: str = user_key
         self.secret_key: str = secret_key
-        self.user_agent: str = user_agent
-        self.api_url: str = api_url
+        self.user_agent: Optional[str] = user_agent
+        self.api_url: Optional[str] = api_url
 
         self.token_sha: Optional[str] = None
         self.auth_token: Optional[str] = None
@@ -177,10 +193,9 @@ class Api(): # pylint: disable=too-many-instance-attributes
             return self.__customer
         except AttributeError:
             return None
+
     @customer.setter
-    def customer(
-            self,
-            value: str) -> None:
+    def customer(self, value: str) -> None:
         """Set customer value
 
         Args:
@@ -189,10 +204,10 @@ class Api(): # pylint: disable=too-many-instance-attributes
         Returns:
             None
         """
-        self.__customer=value
+        self.__customer = value
 
     @property
-    def domain(self) -> str:
+    def domain(self) -> Optional[str]:
         """
         Get current domain name
 
@@ -203,21 +218,18 @@ class Api(): # pylint: disable=too-many-instance-attributes
             return self.__domain
         except AttributeError:
             return None
+
     @domain.setter
-    def domain(
-            self,
-            value: str) -> None:
+    def domain(self, value: str) -> None:
         """
         Set domain name
 
         Args:
             value (str): Domain name to set
         """
-        self.__domain=value
+        self.__domain = value
 
-    def set_domain(
-            self,
-            domain: str) -> None:
+    def set_domain(self, domain: str) -> None:
         """Sets API domain
 
         Args:
@@ -226,9 +238,8 @@ class Api(): # pylint: disable=too-many-instance-attributes
         self.__domain = domain
 
     def gen_auth(
-            self,
-            new: Optional[bool] =False,
-            time_stamp: Optional[str] =None) -> str:
+        self, new: Optional[bool] = False, time_stamp: Optional[str] = None
+    ) -> str:
         """Generate auth token for API calls
 
         Returns cached auth token, or generate a new token
@@ -248,14 +259,14 @@ class Api(): # pylint: disable=too-many-instance-attributes
             self.__gen_token_sha()
 
         elif new:
-            self.time_stamp = f'{datetime.datetime.now():%Y%m%d%H%M%S}'
+            self.time_stamp = f"{datetime.datetime.now():%Y%m%d%H%M%S}"
             self.__gen_token_sha()
 
         elif self.token_sha is None:
             self.__gen_token_sha()
 
-        token = f'{self.user_key}:{self.time_stamp}:{self.token_sha}'
-        self.headers.update({'X-Api-Signature': token})
+        token = f"{self.user_key}:{self.time_stamp}:{self.token_sha}"
+        self.headers.update({"X-Api-Signature": token})
 
         return token
 
@@ -265,7 +276,7 @@ class Api(): # pylint: disable=too-many-instance-attributes
         Returns:
             str: Auth Token SHA hash
         """
-        base_str = f'{self.user_key}{self.user_agent}{self.time_stamp}{self.secret_key}'
+        base_str = f"{self.user_key}{self.user_agent}{self.time_stamp}{self.secret_key}"
 
         sha1 = hashlib.sha1(base_str.encode())
 
@@ -276,9 +287,9 @@ class Api(): # pylint: disable=too-many-instance-attributes
         return self.token_sha
 
     @staticmethod
-    def _params( # pylint: disable=unused-argument
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> Tuple[dict, str]:
+    def _params(  # pylint: disable=unused-argument
+        *pargs: Optional[Any], **kwargs: Optional[dict]
+    ) -> Tuple[dict, str]:
         """Create a shallow copy of kwargs
 
         Creates a shallow copy of kwargs and data for debug
@@ -290,16 +301,18 @@ class Api(): # pylint: disable=too-many-instance-attributes
         Raises:
             None
         """
-        args = ''
+        args = ""
         params = {}
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():  # pylint: disable=invalid-name
             params.update({k: v})
-            sep = '?' if args else '&'
-            args = f'{args}{sep}{k}={v}'
+            sep = "?" if args else "&"
+            args = f"{args}{sep}{k}={v}"
 
         return params, args
 
-    def _headers(self) -> dict:
+    def _headers(
+        self,
+    ) -> CaseInsensitiveDict[str]:  # pylint: disable=unsubscriptable-object
         """Get the API headers
 
         Returns the API HTTP headers for a call
@@ -312,10 +325,7 @@ class Api(): # pylint: disable=too-many-instance-attributes
         return self.headers
 
     @rate_limit(120)
-    def get(
-            self,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> requests.Response:
+    def get(self, *pargs: Optional[Any], **kwargs: Optional[dict]) -> requests.Response:
         """API: `get` data from the rackspace API
 
         Requests data from the Rackspace API, ensuring we don't exceed our `get` rate limit
@@ -328,11 +338,8 @@ class Api(): # pylint: disable=too-many-instance-attributes
         """
         return self.__send(requests.get, *pargs, **kwargs)
 
-    @rate_limit(90, 'send')
-    def put(
-            self,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> requests.Response:
+    @rate_limit(90, "send")
+    def put(self, *pargs: Optional[Any], **kwargs: Optional[dict]) -> requests.Response:
         """API: Update `put` resouce in Rackspace API
 
         Updates the data of a resouce in the Rackspace API, ensuring we don't exceed
@@ -346,11 +353,10 @@ class Api(): # pylint: disable=too-many-instance-attributes
         """
         return self.__send(requests.put, *pargs, **kwargs)
 
-    @rate_limit(90, 'send')
+    @rate_limit(90, "send")
     def post(
-            self,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> requests.Response:
+        self, *pargs: Optional[Any], **kwargs: Optional[dict]
+    ) -> requests.Response:
         """API: Create `post` a resouce in Rackspace API
 
         Creates a new resouce in the Rackspace API, ensuring we don't exceed
@@ -366,13 +372,14 @@ class Api(): # pylint: disable=too-many-instance-attributes
         print(json.dumps(kwargs, sort_keys=True, indent=4))
         return self.__send(requests.post, *pargs, **kwargs)
 
-    def __send( # pylint: disable=keyword-arg-before-vararg
-            self,
-            func: Callable,
-            path: str,
-            data: dict =None,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> requests.Response:
+    def __send(  # pylint: disable=keyword-arg-before-vararg
+        self,
+        func: Callable,
+        path: str,
+        data: Optional[Dict] = None,
+        *pargs: Optional[Any],
+        **kwargs: Optional[dict],
+    ) -> requests.Response:
         # pylint: disable=invalid-name,line-too-long
         """API: Private method for `get`, `put`, `post`, and `delete`
 
@@ -393,29 +400,28 @@ class Api(): # pylint: disable=too-many-instance-attributes
 
         params, args = self._params(*pargs, **kwargs)
         fname = func.__name__.upper()
-        color = ''
-        if fname == 'GET':
+        color = ""
+        if fname == "GET":
             color = Fore.GREEN
 
-        elif fname == 'PUT':
+        elif fname == "PUT":
             color = Fore.YELLOW
 
-        elif fname == 'POST':
+        elif fname == "POST":
             color = Fore.YELLOW
 
-        elif fname == 'DELETE':
+        elif fname == "DELETE":
             color = Fore.RED
 
-        fname = f'{color}{fname}{Style.RESET_ALL}'
+        fname = f"{color}{fname}{Style.RESET_ALL}"
 
         print(f"{fname} {''.join((URL, args))}")
         return func(URL, data=data, headers=self._headers(), params=params)
 
-    @rate_limit(90, 'send')
+    @rate_limit(90, "send")
     def delete(
-            self,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> Union[requests.Response, None]:
+        self, *pargs: Optional[Any], **kwargs: Optional[dict]
+    ) -> Union[requests.Response, None]:
         """API: Delete resource from Rackspace
 
         Delete the resource from the Rackspace API, ensuring we do not exceed
@@ -432,14 +438,12 @@ class Api(): # pylint: disable=too-many-instance-attributes
             requests.Response: Response for the DELETE call
         """
         prompt = f"\n{pargs[0]}\nAre you sure you wish to delete (Yes/No)? "
-        while input(prompt).lower() in ('y', 'yes'):
+        while input(prompt).lower() in ("y", "yes"):
             return self.__send(requests.delete, *pargs, **kwargs)
 
         return None
 
-    def _url(
-            self,
-            path: str) -> str:
+    def _url(self, path: str) -> str:
         """Construct the full URL for an API call
 
         The `path` will be appended to the API url
@@ -450,11 +454,9 @@ class Api(): # pylint: disable=too-many-instance-attributes
         Returns:
             str: Full URL for the API call
         """
-        return f'{self.api_url}{path}'
+        return f"{self.api_url}{path}"
 
-    def _customer_path(
-            self,
-            ver: int =1) -> str:
+    def _customer_path(self, ver: int = 1) -> str:
         """Construct the path for customer root path
 
         Args:
@@ -463,12 +465,9 @@ class Api(): # pylint: disable=too-many-instance-attributes
         Returns:
             str: Customer API path
         """
-        return f'/v{ver}/customers/{self.customer}'
+        return f"/v{ver}/customers/{self.customer}"
 
-    def _domain_path(
-            self,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> str:
+    def _domain_path(self, *pargs: Optional[Any], **kwargs: Optional[dict]) -> str:
         """Construct the path for the domain root path
 
         NOTES:
@@ -482,12 +481,9 @@ class Api(): # pylint: disable=too-many-instance-attributes
             str: Domain API path
         """
         root = self._customer_path(*pargs, **kwargs)
-        return f'{root}/domains/{self.domain}'
+        return f"{root}/domains/{self.domain}"
 
-    def _accounts_path(
-            self,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> str:
+    def _accounts_path(self, *pargs: Optional[Any], **kwargs: Optional[dict]) -> str:
         """Construct the path for the accounts root path
 
         NOTES:
@@ -501,13 +497,11 @@ class Api(): # pylint: disable=too-many-instance-attributes
             str: Accounts API path
         """
         root = self._domain_path(*pargs, **kwargs)
-        return f'{root}/rs/mailboxes'
+        return f"{root}/rs/mailboxes"
 
     def _account_path(
-            self,
-            account: str,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> str:
+        self, account: str, *pargs: Optional[Any], **kwargs: Optional[dict]
+    ) -> str:
         """Construct the path for an account root path
 
         NOTES:
@@ -522,12 +516,9 @@ class Api(): # pylint: disable=too-many-instance-attributes
             str: Account API path
         """
         root = self._accounts_path(*pargs, **kwargs)
-        return f'{root}/{account}'
+        return f"{root}/{account}"
 
-    def _aliases_path(
-            self,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> str:
+    def _aliases_path(self, *pargs: Optional[Any], **kwargs: Optional[dict]) -> str:
         """Construct the path for aliases root path
 
         NOTE:
@@ -541,13 +532,11 @@ class Api(): # pylint: disable=too-many-instance-attributes
             str: Aliases API path
         """
         root = self._domain_path(*pargs, **kwargs)
-        return f'{root}/rs/aliases'
+        return f"{root}/rs/aliases"
 
     def _alias_path(
-            self,
-            alias: str,
-            *pargs: Optional[Any],
-            **kwargs: Optional[dict]) -> str:
+        self, alias: str, *pargs: Optional[Any], **kwargs: Optional[dict]
+    ) -> str:
         """Construct the path for an alias root path
 
         NOTE:
@@ -562,10 +551,10 @@ class Api(): # pylint: disable=too-many-instance-attributes
             str: Alias API path
         """
         root = self._aliases_path(*pargs, **kwargs)
-        return f'{root}/{alias}'
+        return f"{root}/{alias}"
 
     @staticmethod
-    def httpclient_logging_unpatch(level: Optional[int] =logging.DEBUG) -> None:
+    def httpclient_logging_unpatch(level: int = logging.DEBUG) -> None:
         """Patch http.client to disable logging
 
         Ugly patch to http.client to disable logging queries and headers/data
@@ -575,11 +564,11 @@ class Api(): # pylint: disable=too-many-instance-attributes
         """
         logging.disable(level)
 
-        delattr(http.client, 'print') # type: ignore
-        http.client.HTTPConnection.debuglevel = 0 # type: ignore
+        delattr(http.client, "print")  # type: ignore
+        http.client.HTTPConnection.debuglevel = 0  # type: ignore
 
     @staticmethod
-    def httpclient_logging_patch(level: Optional[int] =logging.DEBUG) -> None:
+    def httpclient_logging_patch(level: int = logging.DEBUG) -> None:
         """Patch http.client to log queries
 
         Ugly patch to http.client to force it to log queries and headers/data
@@ -588,20 +577,21 @@ class Api(): # pylint: disable=too-many-instance-attributes
             level (int, optional): Logging level, default to `logging.DEBUG`
         """
         logging.basicConfig(level=level)
-        httpclient_logger = logging.getLogger('http.client')
+        httpclient_logger = logging.getLogger("http.client")
 
         def httpclient_log(*pargs):
-            httpclient_logger.log(level, ' '.join(pargs))
+            httpclient_logger.log(level, " ".join(pargs))
 
-        http.client.print = httpclient_log # type: ignore
+        http.client.print = httpclient_log  # type: ignore
 
-        http.client.HTTPConnection.debuglevel = 1 # type: ignore
+        http.client.HTTPConnection.debuglevel = 1  # type: ignore
 
     @staticmethod
     def _success(
-            response: requests.Response,
-            status_code: Optional[int] =200,
-            output: Optional[bool] =True) -> bool:
+        response: requests.Response,
+        status_code: Optional[int] = 200,
+        output: Optional[bool] = True,
+    ) -> bool:
         """Check response for "success"
 
         Checks the response object for "success", normally status_code 200

@@ -11,6 +11,8 @@ import pathlib
 import typing
 import yaml
 
+from typing import Optional, Union, Tuple
+
 from rackspace import spam, Api, Account, Alias
 
 KEYS = ['account', 'alias', 'spam', 'blocklist', 'ipblocklist', 'safelist', 'ipsafelist']
@@ -21,13 +23,15 @@ CONFIG_FILE = 'conf.yml'
 
 API = None
 
-InitObj = typing.Tuple[str,
-                       typing.Union[
-                           Account,
-                           Alias,
-                           spam.Settings,
-                           spam.ACL
-                       ]]
+InitObj = Tuple[
+    str,
+    Union[
+        Account,
+        Alias,
+        spam.Settings,
+        spam.ACL
+    ]
+]
 
 def init_obj(fname: str) -> InitObj:
     """
@@ -48,6 +52,8 @@ def init_obj(fname: str) -> InitObj:
 
     addr = '-'.join(items[:-1])
 
+    name: Optional[str]
+    domain: str
     name, domain = addr.split('@')
     if name == '':
         name = None
