@@ -14,7 +14,7 @@ from rackspace import Api
 
 CONFIG_FILE = 'conf.yml'
 CONFIG_DIR  = 'conf.d'
-SYNC_DIR    = 'tmp'
+SYNC_DIR    = 'state'
 DEBUG = False
 ACCOUNT_FIELDS = ('firstName', 'lastName', 'displayName', 'enabled', 'password')
 

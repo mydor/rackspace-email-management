@@ -11,7 +11,7 @@ from rackspace import spam, Api, Account, Alias
 KEYS = ['account', 'alias', 'spam', 'blocklist', 'ipblocklist', 'safelist', 'ipsafelist']
 REMOVE = ('account', 'alias')
 
-SYNC_DIR = 'tmp'
+SYNC_DIR = 'state'
 CONFIG_FILE = 'conf.yml'
 
 api = None

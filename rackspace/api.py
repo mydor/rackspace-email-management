@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import datetime
+import functools
 import hashlib
 import http.client
 import json
@@ -27,6 +28,7 @@ def rate_limit(rate: int =90, _id: str =None):
         if _id is None:
             _id = func.__name__
 
+        @functools.wraps(func)
         def inner_wrapper(*pargs, **kwargs):
             while True:
                 response = func(*pargs, **kwargs)

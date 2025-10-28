@@ -8,7 +8,7 @@ import os
 import yaml
 
 CONFIG_DIR = 'conf.d'
-SYNC_DIR = 'tmp'
+SYNC_DIR = 'state'
 
 def store(src, address, data, data_dir):
 
